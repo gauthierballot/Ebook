@@ -77,7 +77,7 @@ export default async function handler(req, res) {
   const cleanBase64 = image.replace(/^data:image\/[a-zA-Z0-9]+;base64,/, '');
 
   // 4. Confection des instructions pour Gemini
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 
   const typeNotice = type === 'theatre'
     ? "This page is from a theatrical play. You MUST strictly preserve all character names, stage directions, and every single line break."

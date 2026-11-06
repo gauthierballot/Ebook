@@ -69,10 +69,14 @@ Réponds uniquement en français.`;
     // OPTION A : Google Gemini (utilise l'API REST native sans package npm requis)
     // -------------------------------------------------------------------------
     if (provider === 'gemini') {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       const apiRes = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptFinal }] }],
           generationConfig: {
