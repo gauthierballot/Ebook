@@ -268,7 +268,9 @@ async function afficherPages(racine, idLivre) {
   function etapeCorrection(texte, details = null) {
     let messageAvertissement = '';
     if (details?.secoursActive) {
-      messageAvertissement += '<p class="message message-info" style="font-size:0.88rem">Lecture locale (moteur de secours), la qualité peut être moindre.</p>';
+      messageAvertissement += `<p class="message message-avertissement" style="font-size:0.88rem">
+        <strong>Lecture locale, la qualité peut être moindre.</strong><br>
+        La lecture par IA n'a pas fonctionné : ${esc(details.raisonSecours || 'raison inconnue')}</p>`;
     }
     if (details?.faibleConfiance) {
       messageAvertissement += '<p class="message message-avertissement">Lecture peu fiable, vérifie le texte ou reprends la photo avec plus de lumière.</p>';

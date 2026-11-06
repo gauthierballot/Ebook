@@ -36,24 +36,25 @@ export default async function handler(req, res) {
     return res.status(401).json({ erreur: 'Accès non autorisé. Connecte-toi pour numériser des pages.' });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  // L'URL et la clé « publishable » Supabase sont publiques (déjà présentes dans
+  // js/config.js) : on les utilise par défaut si les variables Vercel manquent.
+  // La vérification du jeton est donc TOUJOURS faite.
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://vwcqiffpdzkfvfcqlhyx.supabase.co';
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_SqWEdr3yfyDpQ4NZTwdcHA_vDdcVqa_';
 
-  if (supabaseUrl && supabaseAnonKey) {
-    try {
-      const authRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'apikey': supabaseAnonKey,
-        },
-      });
+  try {
+    const authRes = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'apikey': supabaseAnonKey,
+      },
+    });
 
-      if (!authRes.ok) {
-        return res.status(401).json({ erreur: 'Session invalide ou expirée. Reconnecte-toi.' });
-      }
-    } catch {
-      return res.status(500).json({ erreur: 'Impossible de vérifier la session utilisateur.' });
+    if (!authRes.ok) {
+      return res.status(401).json({ erreur: 'Session invalide ou expirée. Reconnecte-toi.' });
     }
+  } catch {
+    return res.status(500).json({ erreur: 'Impossible de vérifier la session utilisateur.' });
   }
 
   // 2. Vérification de la présence de la clé API LLM
@@ -90,8 +91,7 @@ ${typeNotice}`;
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
-    const apiRes = await fetch(url, {
+    const requete = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -115,10 +115,27 @@ ${typeNotice}`;
         ],
         generationConfig: {
           temperature: 0,
-          maxOutputTokens: 3000,
+          maxOutputTokens: 8192,
+          // Réflexion minimale : plus rapide, et le budget de sortie sert au texte
+          thinkingConfig: { thinkingLevel: 'minimal' },
         },
       }),
-    });
+    };
+
+    // Un nouvel essai automatique si le modèle est momentanément surchargé (503)
+    let apiRes = await fetch(url, requete);
+    if (apiRes.status === 503) {
+      await new Promise((r) => setTimeout(r, 1500));
+      apiRes = await fetch(url, requete);
+    }
+
+    if (apiRes.status === 503) {
+      return res.status(503).json({ erreur: "Le service d'IA est momentanément surchargé. Réessaie dans quelques secondes." });
+    }
+
+    if (apiRes.status === 400 || apiRes.status === 403) {
+      return res.status(502).json({ erreur: "La clé Gemini est refusée par Google. Vérifie la variable LLM_API_KEY dans Vercel." });
+    }
 
     if (apiRes.status === 429) {
       return res.status(429).json({ erreur: "Trop de photos d'un coup, réessaie dans une minute." });
@@ -138,7 +155,12 @@ ${typeNotice}`;
       return res.status(422).json({ erreur: "La page a été bloquée par les filtres de sécurité. Reprends la photo." });
     }
 
-    const texte = candidate?.content?.parts?.[0]?.text?.trim() || '';
+    // On assemble toutes les parties de texte (en ignorant d'éventuelles « pensées »)
+    const texte = (candidate?.content?.parts || [])
+      .filter((p) => typeof p.text === 'string' && !p.thought)
+      .map((p) => p.text)
+      .join('')
+      .trim();
 
     if (!texte) {
       return res.status(422).json({ erreur: "Aucun texte n'a pu être extrait de cette image. Reprends la photo." });

@@ -317,6 +317,10 @@ export async function reconnaitre(fichier, options = {}, surProgression) {
 
     const resSecours = await reconnaitreParTesseract(fichier, { langue, type }, surProgression);
     resSecours.secoursActive = true;
+    // On garde la raison de l'échec de l'IA pour l'afficher à l'utilisateur
+    resSecours.raisonSecours = navigator.onLine
+      ? (err?.message || 'Erreur inconnue')
+      : 'Tu es hors ligne.';
     return resSecours;
   }
 }
