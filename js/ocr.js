@@ -1,91 +1,31 @@
 // =============================================================================
-//  OCR : reconnaissance du texte d'une photo, dans le navigateur (Tesseract.js)
-//  Le script Tesseract (lourd) n'est chargé qu'au moment d'ajouter une page.
+//  OCR : Reconnaissance de texte pour Ebook
+//  1. Voie principale : IA de vision Google Gemini via la serverless /api/ocr
+//  2. Voie de secours : Tesseract.js optimisé en local dans le navigateur
 // =============================================================================
 
 const URL_TESSERACT = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-const LANGUES = ['fra', 'eng']; // français + anglais
 
-let promesseScript = null;
-let worker = null;
-let promesseWorker = null;
-let rappelProgression = null; // fonction appelée pendant l'OCR
+let promesseScriptTesseract = null;
+let tesseractWorker = null;
+let tesseractLangue = null;
+let rappelProgression = null;
 
-/** Erreur « métier » avec un code lisible par l'interface. */
 export class ErreurOCR extends Error {
   constructor(code, message, details = {}) {
     super(message);
-    this.code = code;          // 'chargement' | 'image' | 'vide' | 'illisible' | 'annule'
+    this.code = code; // 'chargement' | 'image' | 'vide' | 'illisible' | 'annule' | 'reseau'
     Object.assign(this, details);
   }
 }
 
-/** Charge le script Tesseract une seule fois. */
-function chargerScript() {
-  if (window.Tesseract) return Promise.resolve();
-  if (!promesseScript) {
-    promesseScript = new Promise((resoudre, rejeter) => {
-      const s = document.createElement('script');
-      s.src = URL_TESSERACT;
-      s.async = true;
-      s.onload = () => resoudre();
-      s.onerror = () => { s.remove(); rejeter(new Error('script')); };
-      document.head.appendChild(s);
-    }).catch((e) => { promesseScript = null; throw e; });
-  }
-  return promesseScript;
-}
-
-/** Libellés français des étapes internes de Tesseract. */
-const ETAPES = {
-  'loading tesseract core': 'Chargement du moteur de lecture…',
-  'initializing tesseract': 'Démarrage du moteur…',
-  'initialized tesseract': 'Démarrage du moteur…',
-  'loading language traineddata': 'Chargement des langues (une seule fois)…',
-  'loaded language traineddata': 'Langues prêtes…',
-  'initializing api': 'Préparation…',
-  'initialized api': 'Préparation…',
-  'recognizing text': 'Lecture du texte…',
-};
-
-function journal(m) {
-  if (!rappelProgression || !m?.status) return;
-  const p = typeof m.progress === 'number' ? m.progress : 0;
-  // 0 → 30 % : chargement ; 30 → 100 % : reconnaissance
-  const global = m.status === 'recognizing text' ? 30 + p * 70 : Math.min(28, 5 + p * 23);
-  rappelProgression({ libelle: ETAPES[m.status] || 'Traitement…', pourcent: Math.round(global) });
-}
-
-async function obtenirWorker() {
-  if (worker) return worker;
-  if (!promesseWorker) {
-    promesseWorker = (async () => {
-      await chargerScript();
-      const w = await window.Tesseract.createWorker(LANGUES, 1, { logger: journal, errorHandler: () => {} });
-      await w.setParameters({ preserve_interword_spaces: '1' });
-      worker = w;
-      return w;
-    })().catch((e) => { promesseWorker = null; throw e; });
-  }
-  return promesseWorker;
-}
-
-/** Libère la mémoire (appelé quand on quitte l'écran d'ajout). */
-export async function arreterOCR() {
-  const w = worker;
-  worker = null;
-  promesseWorker = null;
-  if (w) { try { await w.terminate(); } catch { /* déjà arrêté */ } }
-}
-
-// ---------------------------------------------------------------------------
-// Prétraitement de l'image : redimensionnement, niveaux de gris, contraste
-// ---------------------------------------------------------------------------
-async function decoderImage(fichier) {
+// -----------------------------------------------------------------------------
+// 1. Décodage et orientation EXIF de la photo
+// -----------------------------------------------------------------------------
+async function chargerImageOriente(fichier) {
   try {
     return await createImageBitmap(fichier, { imageOrientation: 'from-image' });
   } catch {
-    // Repli pour les anciens navigateurs
     const url = URL.createObjectURL(fichier);
     try {
       const img = new Image();
@@ -98,127 +38,298 @@ async function decoderImage(fichier) {
   }
 }
 
-export async function pretraiter(fichier) {
-  let image;
+// -----------------------------------------------------------------------------
+// 2. Préparation pour l'IA Gemini (voie principale)
+//    - Orientation EXIF corrigée
+//    - Côté le plus long à 1600 px max
+//    - Export JPEG qualité 0.85 SANS niveaux de gris ni altération de contraste
+// -----------------------------------------------------------------------------
+export async function preparerPourGemini(fichier) {
+  let img;
   try {
-    image = await decoderImage(fichier);
+    img = await chargerImageOriente(fichier);
   } catch {
-    throw new ErreurOCR('image', 'Ce format d\'image n\'est pas pris en charge. Essaie une photo JPEG ou PNG.');
+    throw new ErreurOCR('image', "Format d'image non supporté ou fichier illisible.");
   }
 
-  const largeur = image.width;
-  const hauteur = image.height;
-  if (!largeur || !hauteur) throw new ErreurOCR('image', 'Cette image semble vide ou abîmée.');
+  const w = img.width;
+  const h = img.height;
+  if (!w || !h) throw new ErreurOCR('image', "L'image semble vide ou corrompue.");
 
-  // Côté le plus long ramené entre 1 400 et 2 400 px : bon compromis précision / vitesse
-  const cote = Math.max(largeur, hauteur);
-  const echelle = cote > 2400 ? 2400 / cote : cote < 1400 ? Math.min(2, 1400 / cote) : 1;
-  const l = Math.round(largeur * echelle);
-  const h = Math.round(hauteur * echelle);
+  const maxCote = 1600;
+  const ratio = Math.min(1, maxCote / Math.max(w, h));
+  const cibleW = Math.round(w * ratio);
+  const cibleH = Math.round(h * ratio);
 
   const canvas = document.createElement('canvas');
-  canvas.width = l;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  canvas.width = cibleW;
+  canvas.height = cibleH;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(image, 0, 0, l, h);
-  if (typeof image.close === 'function') image.close();
+  ctx.drawImage(img, 0, 0, cibleW, cibleH);
 
-  const donnees = ctx.getImageData(0, 0, l, h);
-  const px = donnees.data;
+  if (typeof img.close === 'function') img.close();
 
-  // 1) Niveaux de gris (luminance) + histogramme
-  const histo = new Uint32Array(256);
-  for (let i = 0; i < px.length; i += 4) {
-    const g = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
-    px[i] = g;
-    histo[g]++;
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  return dataUrl.replace(/^data:image\/[a-zA-Z0-9]+;base64,/, '');
+}
+
+// -----------------------------------------------------------------------------
+// 3. Appel de l'API /api/ocr (Gemini)
+// -----------------------------------------------------------------------------
+async function reconnaitreParGemini(fichier, { langue = 'fr', type = 'roman', token }, surProgression) {
+  surProgression?.({ libelle: "Préparation de l'image…", pourcent: 15 });
+  const base64 = await preparerPourGemini(fichier);
+
+  surProgression?.({ libelle: "Lecture de la page par l'IA…", pourcent: 45 });
+
+  const headers = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // 2) Étirement du contraste : on ignore 1 % des pixels les plus sombres et clairs
-  const total = l * h;
+  const reponse = await fetch('/api/ocr', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      image: base64,
+      langue,
+      type,
+    }),
+  });
+
+  surProgression?.({ libelle: "Finalisation du texte…", pourcent: 85 });
+
+  const donnees = await reponse.json().catch(() => ({}));
+
+  if (!reponse.ok) {
+    const message = donnees.erreur || `Erreur serveur (${reponse.status})`;
+    throw new ErreurOCR('ia_echec', message, { statut: reponse.status, nonConfigure: donnees.nonConfigure });
+  }
+
+  const texte = (donnees.texte || '').trim();
+
+  if (texte === '[ILLISIBLE]') {
+    throw new ErreurOCR('illisible', "La page est illisible ou ne contient pas de texte. Reprends la photo avec plus de lumière.");
+  }
+
+  if (!texte) {
+    throw new ErreurOCR('vide', "Aucun texte n'a été trouvé sur cette page.");
+  }
+
+  surProgression?.({ libelle: "Terminé !", pourcent: 100 });
+  return {
+    texte,
+    mode: 'ia',
+    confiance: 99,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// 4. Moteur de secours : Tesseract.js optimisé
+// -----------------------------------------------------------------------------
+function chargerScriptTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  if (!promesseScriptTesseract) {
+    promesseScriptTesseract = new Promise((resoudre, rejeter) => {
+      const s = document.createElement('script');
+      s.src = URL_TESSERACT;
+      s.async = true;
+      s.onload = () => resoudre();
+      s.onerror = () => {
+        s.remove();
+        promesseScriptTesseract = null;
+        rejeter(new ErreurOCR('chargement', "Impossible de charger Tesseract.js."));
+      };
+      document.head.appendChild(s);
+    });
+  }
+  return promesseScriptTesseract;
+}
+
+const ETAPES_TESSERACT = {
+  'loading tesseract core': 'Chargement du moteur local…',
+  'initializing tesseract': 'Initialisation du moteur…',
+  'loading language traineddata': 'Téléchargement de la langue…',
+  'loaded language traineddata': 'Langue chargée…',
+  'recognizing text': 'Lecture locale du texte…',
+};
+
+function journalTesseract(m) {
+  if (!rappelProgression || !m?.status) return;
+  const p = typeof m.progress === 'number' ? m.progress : 0;
+  const global = m.status === 'recognizing text' ? 40 + p * 55 : Math.min(38, 10 + p * 28);
+  rappelProgression({
+    libelle: ETAPES_TESSERACT[m.status] || 'Traitement local…',
+    pourcent: Math.round(global),
+    secours: true,
+  });
+}
+
+async function obtenirWorkerTesseract(langueCode) {
+  if (tesseractWorker && tesseractLangue === langueCode) {
+    return tesseractWorker;
+  }
+
+  if (tesseractWorker) {
+    try { await tesseractWorker.terminate(); } catch {}
+    tesseractWorker = null;
+    tesseractLangue = null;
+  }
+
+  await chargerScriptTesseract();
+
+  try {
+    const w = await window.Tesseract.createWorker(langueCode, 1, {
+      logger: journalTesseract,
+      errorHandler: () => {},
+    });
+    tesseractWorker = w;
+    tesseractLangue = langueCode;
+    return w;
+  } catch {
+    throw new ErreurOCR('chargement', `Impossible de charger les données linguistiques pour ${langueCode}. Vérifie ta connexion.`);
+  }
+}
+
+// Prétraitement modéré pour Tesseract (largeur 1800-2200px, niveaux de gris doux)
+async function pretraiterPourTesseract(fichier) {
+  const img = await chargerImageOriente(fichier);
+  const w = img.width;
+  const h = img.height;
+  if (!w || !h) throw new ErreurOCR('image', "Image vide.");
+
+  // Largeur cible entre 1800 et 2200 px
+  const cibleW = Math.min(2200, Math.max(1800, Math.round(w)));
+  const echelle = cibleW / w;
+  const cibleH = Math.round(h * echelle);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cibleW;
+  canvas.height = cibleH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, cibleW, cibleH);
+  if (typeof img.close === 'function') img.close();
+
+  const donnees = ctx.getImageData(0, 0, cibleW, cibleH);
+  const px = donnees.data;
+
+  // Niveaux de gris + calcul min/max modéré
+  const histo = new Uint32Array(256);
+  for (let i = 0; i < px.length; i += 4) {
+    const lum = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) | 0;
+    px[i] = lum;
+    histo[lum]++;
+  }
+
+  // Étirement doux du contraste (ignore 0.5% des extrêmes pour éviter d'écraser les caractères fins)
+  const total = cibleW * cibleH;
   let cumul = 0, bas = 0, haut = 255;
-  for (let v = 0; v < 256; v++) { cumul += histo[v]; if (cumul > total * 0.01) { bas = v; break; } }
+  for (let v = 0; v < 256; v++) { cumul += histo[v]; if (cumul > total * 0.005) { bas = v; break; } }
   cumul = 0;
-  for (let v = 255; v >= 0; v--) { cumul += histo[v]; if (cumul > total * 0.01) { haut = v; break; } }
+  for (let v = 255; v >= 0; v--) { cumul += histo[v]; if (cumul > total * 0.005) { haut = v; break; } }
   const etendue = Math.max(1, haut - bas);
 
   for (let i = 0; i < px.length; i += 4) {
     let v = ((px[i] - bas) * 255) / etendue;
     v = v < 0 ? 0 : v > 255 ? 255 : v;
-    // Légère courbe pour foncer l'encre sans écraser les détails
-    v = 255 * Math.pow(v / 255, 1.15);
     px[i] = px[i + 1] = px[i + 2] = v;
-    px[i + 3] = 255;
   }
+
   ctx.putImageData(donnees, 0, 0);
   return canvas;
 }
 
-// ---------------------------------------------------------------------------
-// Nettoyage du texte reconnu
-// ---------------------------------------------------------------------------
 export function nettoyerTexte(brut) {
   return String(brut || '')
     .replace(/\r/g, '')
     .replace(/ﬁ/g, 'fi').replace(/ﬂ/g, 'fl').replace(/ﬀ/g, 'ff')
     .split('\n')
     .map((ligne) => ligne.replace(/[ \t]+$/g, '').replace(/^[ \t]+/, ''))
-    // On retire les lignes de « bruit » (ex. « | », « ~ ») sans aucune lettre ni chiffre
     .filter((ligne) => ligne === '' || /[\p{L}\p{N}]/u.test(ligne))
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-// ---------------------------------------------------------------------------
-// Reconnaissance complète
-// ---------------------------------------------------------------------------
-/**
- * Lit le texte d'une photo.
- * @param {File} fichier
- * @param {(p:{libelle:string,pourcent:number})=>void} surProgression
- * @returns {Promise<{texte:string, confiance:number}>}
- */
-export async function reconnaitre(fichier, surProgression) {
+async function reconnaitreParTesseract(fichier, { langue = 'fr', type = 'roman' }, surProgression) {
+  const codeLangue = langue === 'en' ? 'eng' : 'fra';
   rappelProgression = surProgression;
-  surProgression?.({ libelle: 'Préparation de l\'image…', pourcent: 2 });
 
-  const canvas = await pretraiter(fichier);
+  surProgression?.({ libelle: "Préparation pour lecture locale…", pourcent: 10, secours: true });
+  const canvas = await pretraiterPourTesseract(fichier);
 
-  let w;
-  try {
-    w = await obtenirWorker();
-  } catch {
-    throw new ErreurOCR('chargement', navigator.onLine
-      ? 'Le moteur de lecture n\'a pas pu se charger. Réessaie dans un instant.'
-      : 'Tu es hors ligne : le moteur de lecture doit être téléchargé la première fois.');
-  }
+  const w = await obtenirWorkerTesseract(codeLangue);
 
-  let resultat;
-  try {
-    resultat = await w.recognize(canvas);
-  } catch {
-    if (!worker) throw new ErreurOCR('annule', 'Lecture annulée.');
-    throw new ErreurOCR('illisible', 'La lecture de la photo a échoué. Reprends la photo.');
-  } finally {
-    rappelProgression = null;
-  }
+  // PSM 6 pour le théâtre (bloc uniforme), PSM 3 pour les romans
+  const psm = type === 'theatre' ? '6' : '3';
+  await w.setParameters({
+    tessedit_pageseg_mode: psm,
+    preserve_interword_spaces: '1',
+  });
+
+  surProgression?.({ libelle: "Lecture locale en cours…", pourcent: 40, secours: true });
+  const resultat = await w.recognize(canvas);
+
+  rappelProgression = null;
 
   const texte = nettoyerTexte(resultat?.data?.text);
   const confiance = Math.round(resultat?.data?.confidence ?? 0);
   const nbLettres = (texte.match(/\p{L}/gu) || []).length;
 
   if (nbLettres < 15) {
-    throw new ErreurOCR('vide', 'Aucun texte n\'a été trouvé sur cette photo. Vérifie que la page est bien cadrée et éclairée.', { texte, confiance });
+    throw new ErreurOCR('vide', "Aucun texte trouvé. Vérifie le cadrage et l'éclairage.", { texte, confiance });
   }
-  if (confiance < 30) {
-    throw new ErreurOCR('illisible', 'La photo semble floue ou mal éclairée : le texte est difficile à lire.', { texte, confiance });
-  }
-  return { texte, confiance };
+
+  return {
+    texte,
+    mode: 'local',
+    confiance,
+    faibleConfiance: confiance < 60,
+  };
 }
 
-/** Annule une lecture en cours (en arrêtant le moteur). */
+// -----------------------------------------------------------------------------
+// 5. Point d'entrée principal : Gemini d'abord, Tesseract en secours
+// -----------------------------------------------------------------------------
+export async function reconnaitre(fichier, options = {}, surProgression) {
+  const { langue = 'fr', type = 'roman', token } = options;
+
+  // Tentative 1 : IA Gemini
+  try {
+    return await reconnaitreParGemini(fichier, { langue, type, token }, surProgression);
+  } catch (err) {
+    // Si la page a été déclarée illisible par Gemini ou annulée, on ne passe pas en secours
+    if (err.code === 'illisible' || err.code === 'annule') {
+      throw err;
+    }
+
+    // Bascule automatique sur Tesseract en secours
+    surProgression?.({
+      libelle: "Bascule sur le moteur local de secours…",
+      pourcent: 20,
+      secours: true,
+      messageSecours: "Lecture locale, la qualité peut être moindre.",
+    });
+
+    const resSecours = await reconnaitreParTesseract(fichier, { langue, type }, surProgression);
+    resSecours.secoursActive = true;
+    return resSecours;
+  }
+}
+
+export async function arreterOCR() {
+  if (tesseractWorker) {
+    try { await tesseractWorker.terminate(); } catch {}
+    tesseractWorker = null;
+    tesseractLangue = null;
+  }
+  rappelProgression = null;
+}
+
 export function annulerOCR() {
   return arreterOCR();
 }

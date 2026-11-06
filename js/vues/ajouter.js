@@ -134,7 +134,19 @@ async function afficherPages(racine, idLivre) {
     libererApercu();
     zone.innerHTML = `
       <h2 class="titre-3">Page ${numero}</h2>
-      <p class="aide" style="color:var(--texte-2)">Pose le livre bien à plat, à la lumière, et cadre une seule page.</p>
+      <p class="aide" style="color:var(--texte-2)">Cadre la page du livre pour que l'IA en extraie le texte mot pour mot.</p>
+      
+      <details class="conseils-photo">
+        <summary>Pour une meilleure lecture</summary>
+        <ul>
+          <li>Pose le livre bien à plat</li>
+          <li>Privilégie une bonne lumière uniforme sans ombre</li>
+          <li>Tiens ton téléphone bien parallèle à la page</li>
+          <li>Cadre une seule page à la fois</li>
+          <li>Vérifie que tout le texte est bien visible</li>
+        </ul>
+      </details>
+
       <div class="grands-choix">
         <div>
           <input type="file" id="photo-camera" class="visuellement-cache" accept="image/*" capture="environment">
@@ -181,13 +193,15 @@ async function afficherPages(racine, idLivre) {
       <h2 class="titre-3">Lecture de la page ${numero}</h2>
       <img class="apercu-photo" src="${urlApercu}" alt="Aperçu de la photo de la page ${numero}">
       <div class="progression-ocr" role="progressbar" aria-label="Progression de la lecture" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
-      <p class="progression-libelle"><span id="ocr-libelle">Préparation…</span><span id="ocr-pourcent">0 %</span></p>
+      <p class="progression-libelle"><span id="ocr-libelle">Lecture de la page…</span><span id="ocr-pourcent">0 %</span></p>
+      <div id="ocr-secours-msg"></div>
       <div class="actions colonne"><button type="button" class="btn btn-secondaire" data-action="annuler">Annuler</button></div>`;
 
     const barre = zone.querySelector('.progression-ocr');
     const remplissage = barre.querySelector('span');
     const libelle = zone.querySelector('#ocr-libelle');
     const pourcent = zone.querySelector('#ocr-pourcent');
+    const zoneSecours = zone.querySelector('#ocr-secours-msg');
 
     zone.querySelector('[data-action="annuler"]').addEventListener('click', () => {
       jetonOCR++;
@@ -197,15 +211,25 @@ async function afficherPages(racine, idLivre) {
 
     try {
       ocr = ocr || await import('../ocr.js'); // chargement paresseux
-      const resultat = await ocr.reconnaitre(fichier, ({ libelle: l, pourcent: p }) => {
+      const options = {
+        langue: livre.langue,
+        type: livre.type,
+        token: etat.session?.access_token,
+      };
+
+      const resultat = await ocr.reconnaitre(fichier, options, ({ libelle: l, pourcent: p, messageSecours }) => {
         if (monJeton !== jetonOCR) return;
         remplissage.style.width = `${p}%`;
         barre.setAttribute('aria-valuenow', String(p));
         libelle.textContent = l;
         pourcent.textContent = `${p} %`;
+        if (messageSecours && zoneSecours && !zoneSecours.innerHTML) {
+          zoneSecours.innerHTML = `<p class="message message-info" style="font-size:0.86rem;margin-top:10px">${esc(messageSecours)}</p>`;
+        }
       });
+
       if (monJeton !== jetonOCR) return;
-      etapeCorrection(resultat.texte, resultat.confiance);
+      etapeCorrection(resultat.texte, resultat);
     } catch (e) {
       if (monJeton !== jetonOCR) return;
       if (e?.code === 'annule') { etapeChoix(); return; }
@@ -219,7 +243,7 @@ async function afficherPages(racine, idLivre) {
       <h2 class="titre-3">Page ${numero}</h2>
       ${urlApercu ? `<img class="apercu-photo" src="${urlApercu}" alt="Photo de la page ${numero}">` : ''}
       <p class="message message-erreur" role="alert">${esc(message)}</p>
-      <p class="aide" style="color:var(--texte-2)">Conseils : lumière du jour, téléphone parallèle à la page, pas de reflet, mise au point en touchant le texte.</p>
+      <p class="aide" style="color:var(--texte-2)">Conseils : lumière suffisante, téléphone bien parallèle à la page, pas de reflets ni de doigts masquant les lignes.</p>
       <div class="actions colonne">
         <input type="file" id="reprise-camera" class="visuellement-cache" accept="image/*" capture="environment">
         <label for="reprise-camera" class="btn btn-primaire">${icones.photo} Reprendre la photo</label>
@@ -241,13 +265,18 @@ async function afficherPages(racine, idLivre) {
   }
 
   // --- État : correction du texte ---
-  function etapeCorrection(texte, confiance) {
-    const avertissement = confiance !== null && confiance < 60
-      ? '<p class="message message-avertissement">La photo n\'était pas parfaite : relis attentivement le texte.</p>'
-      : '';
+  function etapeCorrection(texte, details = null) {
+    let messageAvertissement = '';
+    if (details?.secoursActive) {
+      messageAvertissement += '<p class="message message-info" style="font-size:0.88rem">Lecture locale (moteur de secours), la qualité peut être moindre.</p>';
+    }
+    if (details?.faibleConfiance) {
+      messageAvertissement += '<p class="message message-avertissement">Lecture peu fiable, vérifie le texte ou reprends la photo avec plus de lumière.</p>';
+    }
+
     zone.innerHTML = `
       <h2 class="titre-3">Page ${numero}</h2>
-      ${avertissement}
+      ${messageAvertissement}
       <form id="form-page" novalidate>
         <div class="champ">
           <label for="texte-page">${texte ? 'Texte reconnu — corrige-le si besoin' : 'Texte de la page'}</label>

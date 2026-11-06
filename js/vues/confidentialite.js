@@ -39,7 +39,7 @@ export async function afficher(racine) {
       <ul>
         <li><strong>Adresse e-mail et mot de passe chiffré</strong> : pour la création et la sécurisation de ton compte.</li>
         <li><strong>Pseudo de lecteur</strong> : modifiable à tout moment, visible publiquement uniquement si tu choisis de publier un avis.</li>
-        <li><strong>Livres et pages numérisées</strong> : tes photographies et les textes extraits restent <strong>strictement privés</strong> et ne sont accessibles que par ton compte utilisateur via les règles de sécurité Row Level Security (RLS) de la base de données.</li>
+        <li><strong>Livres et pages numérisées</strong> : tes photographies et les textes extraits restent <strong>strictement privés</strong> et ne sont accessibles que par ton compte utilisateur via les règles de sécurité Row Level Security (RLS) de la base de données. Les photos de pages sont envoyées au service Google Gemini uniquement pour en extraire le texte, elles ne sont pas conservées par Ebook.</li>
         <li><strong>Avis et notes</strong> : si tu publies un avis littéraire, celui-ci est rendu public afin de partager ton ressenti avec les autres lecteurs.</li>
       </ul>
 
@@ -63,7 +63,7 @@ export async function afficher(racine) {
 
       <h2>6. Propriété intellectuelle et usage personnel</h2>
       <p>
-        Ebook est un outil technologique de lecture destiné exclusivement à la copie privée. <strong>Tu t'engages à ne photographier et numériser que des livres physiques dont tu es légitimement propriétaire</strong>, pour ton usage personnel et privé dans le cercle familial, dans le respect du Code de la Propriété Intellectuelle.
+        Ebook est un outil technologique de lecture destiné exclusivement à la copie privée. <strong>Tu t'engages à ne photographier et numériser que des livres physiques dont tu es légitimement propriétaire, pour ton usage personnel et privé</strong> dans le cercle familial, dans le respect du Code de la Propriété Intellectuelle.
       </p>
 
       <h2>7. Tes droits (accès, modification, suppression)</h2>
