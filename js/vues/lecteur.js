@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { etat } from '../etat.js';
-import { esc, icones, toast, erreurHTML, messageErreur, ouvrirFeuille } from '../ui.js';
+import { esc, icones, toast, erreurHTML, messageErreur, ouvrirFeuille, ouvrirFeuilleResume, lireMetaApple } from '../ui.js';
 import { lireCache, ecrireCache, supprimerCache } from '../cache.js';
 import { themeActuel } from '../theme.js';
 import { enregistrerPageLue, enregistrerTempsLecture, calculerProgression, ouvrirReglageObjectif } from '../objectif.js';
@@ -701,6 +701,7 @@ export async function afficher(racine, { params }) {
     const f = ouvrir({
       titre: 'Options',
       contenu: `<ul class="liste-menu">
+        <li><button type="button" data-m="resume">${icones.livre} Résumé du livre ${total ? `& de la page ${index + 1}` : ''}</button></li>
         ${total ? `
           <li><button type="button" data-m="audio">${icones.audio} ${audioActif ? 'Arrêter la lecture audio' : 'Écouter la page (Livre Audio)'}</button></li>
           <li><button type="button" data-m="recherche">${icones.recherche} Rechercher un mot dans le livre</button></li>
@@ -713,6 +714,19 @@ export async function afficher(racine, { params }) {
         <li><a href="#/ajouter/${livre.id}">${icones.photo} Ajouter des pages</a></li>
         <li><a href="#/livre/${livre.id}">${icones.livre} Fiche du livre</a></li>
       </ul>`,
+    });
+    f.el.querySelector('[data-m="resume"]').addEventListener('click', () => {
+      f.fermer();
+      const meta = lireMetaApple(livre.titre, livre.auteur);
+      feuilleOuverte = ouvrirFeuilleResume({
+        titre: livre.titre,
+        auteur: livre.auteur || '',
+        couverture: meta?.couverture || '',
+        resumeInitial: meta?.resume || '',
+        textePage: total ? pages[index]?.texte : '',
+        numPage: total ? index + 1 : 0,
+        token: etat.session?.access_token,
+      });
     });
     f.el.querySelector('[data-m="audio"]')?.addEventListener('click', () => {
       f.fermer();

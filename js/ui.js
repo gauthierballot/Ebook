@@ -277,3 +277,139 @@ export function ouvrirFeuille({ titre, contenu, classe = '' }) {
   });
   return { el: feuille, fermer };
 }
+
+/**
+ * Ouvre une feuille présentant le résumé d'un livre gratuit (présentation sans spoiler,
+ * résumé complet par l'IA, ou résumé de la page en cours) avec bouton d'import optionnel.
+ */
+export function ouvrirFeuilleResume({
+  titre = '',
+  auteur = '',
+  couverture = '',
+  resumeInitial = '',
+  textePage = '',
+  numPage = 1,
+  token = '',
+  surImporter = null,
+} = {}) {
+  const metaCache = lireMetaApple(titre, auteur);
+  const couv = couverture || metaCache?.couverture || '';
+  const apercuDepart = resumeInitial || metaCache?.resume || '';
+  const cacheModes = {
+    apercu: apercuDepart,
+    complet: '',
+    page: '',
+  };
+
+  const f = ouvrirFeuille({
+    titre: 'Résumé du livre',
+    contenu: `
+      <div class="apercu-apple" style="margin-bottom:14px">
+        ${couv ? `<img class="apercu-apple-img" src="${esc(couv)}" alt="" onerror="this.remove()">` : ''}
+        <div class="apercu-apple-corps">
+          <span class="badge-domaine-public" style="margin-bottom:4px">📖 Résumé littéraire</span>
+          <strong style="font-size:1.05rem;color:var(--texte);display:block">${esc(titre)}</strong>
+          <span style="font-size:.88rem;color:var(--texte-2)">${esc(auteur || 'Auteur classique')}</span>
+        </div>
+      </div>
+
+      <div class="segments" style="margin-bottom:14px" role="tablist" aria-label="Type de résumé">
+        <input type="radio" name="mode-resume" id="res-apercu" value="apercu" checked>
+        <label for="res-apercu">Sans spoiler</label>
+        <input type="radio" name="mode-resume" id="res-complet" value="complet">
+        <label for="res-complet">Résumé complet</label>
+        ${textePage ? `
+          <input type="radio" name="mode-resume" id="res-page" value="page">
+          <label for="res-page">Page ${numPage}</label>
+        ` : ''}
+      </div>
+
+      <div class="zone-texte-resume" id="zone-texte-resume" aria-live="polite"></div>
+
+      ${surImporter ? `
+        <div class="actions" style="margin-top:18px">
+          <button type="button" class="btn btn-succes btn-bloc" id="btn-importer-depuis-resume">
+            📥 Importer tout le livre gratuitement
+          </button>
+        </div>
+      ` : ''}`,
+  });
+
+  const zoneTexte = f.el.querySelector('#zone-texte-resume');
+
+  function formaterParagraphes(texte) {
+    return String(texte || '')
+      .split(/\n\s*\n|\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => `<p style="margin:0 0 10px;line-height:1.6">${esc(p)}</p>`)
+      .join('');
+  }
+
+  async function chargerMode(mode) {
+    if (cacheModes[mode]) {
+      zoneTexte.innerHTML = `
+        <div class="encadre-resume">${formaterParagraphes(cacheModes[mode])}</div>
+        ${mode === 'apercu' && apercuDepart ? `
+          <button type="button" class="btn btn-discret" id="btn-enrichir-ia" style="font-size:.82rem;margin-top:6px;padding:4px 10px;min-height:32px">
+            ✨ Enrichir ce résumé avec l'IA
+          </button>
+        ` : ''}`;
+      zoneTexte.querySelector('#btn-enrichir-ia')?.addEventListener('click', () => {
+        cacheModes.apercu = '';
+        chargerMode('apercu');
+      });
+      return;
+    }
+
+    zoneTexte.innerHTML = `
+      <div class="etat-chargement" style="padding:26px 12px">
+        <span class="roue petite" aria-hidden="true" style="margin-bottom:8px"></span>
+        <p style="margin:0;font-size:.9rem">Rédaction du résumé par l'IA…</p>
+      </div>`;
+
+    try {
+      const r = await fetch('/api/livre-libre', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'resumer',
+          titre,
+          auteur,
+          mode,
+          textePage: mode === 'page' ? textePage : '',
+        }),
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.erreur || 'Impossible de générer le résumé.');
+      }
+
+      const { resume } = await r.json();
+      cacheModes[mode] = resume;
+      if (mode === 'apercu' && !metaCache?.resume) {
+        enregistrerMetaApple(titre, auteur, { couverture: couv, resume });
+      }
+      zoneTexte.innerHTML = `<div class="encadre-resume">${formaterParagraphes(resume)}</div>`;
+    } catch (e) {
+      zoneTexte.innerHTML = `
+        <p class="message message-erreur" style="margin:0">${esc(e.message || 'Erreur lors de la génération du résumé.')}</p>`;
+    }
+  }
+
+  f.el.querySelectorAll('input[name="mode-resume"]').forEach((radio) => {
+    radio.addEventListener('change', () => chargerMode(radio.value));
+  });
+
+  f.el.querySelector('#btn-importer-depuis-resume')?.addEventListener('click', () => {
+    f.fermer();
+    surImporter();
+  });
+
+  chargerMode('apercu');
+  return f;
+}

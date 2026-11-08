@@ -43,6 +43,7 @@ export default async function handler(req, res) {
     if (corps.action === 'importer') return res.status(200).json(await importer(corps));
     if (corps.action === 'analyser-couverture') return res.status(200).json(await analyserCouverture(corps));
     if (corps.action === 'meta-apple') return res.status(200).json(await chercherMetaApple(corps));
+    if (corps.action === 'resumer') return res.status(200).json(await resumerLivre(corps));
     return res.status(400).json({ erreur: 'Action inconnue.' });
   } catch (e) {
     const statut = e.statut || 502;
@@ -390,4 +391,81 @@ If the image is not a book cover/title page or the title is impossible to determ
   }
 
   return { titre, auteur, langue, type, resultats, metaApple };
+}
+
+// -----------------------------------------------------------------------------
+// Génération de résumé de livre ou de page (IA Gemini + repli Apple Livres)
+// -----------------------------------------------------------------------------
+async function resumerLivre({ titre = '', auteur = '', mode = 'apercu', textePage = '' }) {
+  const t = String(titre).trim().slice(0, 180);
+  const a = String(auteur).trim().slice(0, 120);
+  const extrait = String(textePage || '').trim().slice(0, 6000);
+
+  if (!t && !extrait) {
+    throw erreur(400, 'Titre ou texte manquant pour le résumé.');
+  }
+
+  const apiKey = process.env.LLM_API_KEY;
+  if (apiKey && apiKey.trim()) {
+    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    let consigne;
+    if (mode === 'page' && extrait) {
+      consigne = `Tu es un assistant de lecture littéraire clair et pédagogue.
+Voici une page tirée du livre « ${t || 'Livre'} »${a ? ` de ${a}` : ''}.
+Résume clairement en français (en 4 à 6 phrases fluides, sans balises Markdown) ce qui se passe sur cette page, les personnages présents et le sens des passages difficiles :
+
+${extrait}`;
+    } else if (mode === 'complet') {
+      consigne = `Tu es un spécialiste de la littérature.
+Rédige en français un résumé complet et structuré du livre « ${t} »${a ? ` de ${a}` : ''} (environ 150 à 220 mots, sans balises Markdown, en 3 paragraphes séparés par une ligne vide) :
+1. Le contexte et le point de départ de l'intrigue avec les personnages principaux.
+2. Les grandes péripéties et le dénouement de l'œuvre.
+3. Les thèmes majeurs et la portée littéraire du livre.`;
+    } else {
+      consigne = `Tu es un libraire passionné.
+Rédige en français un résumé de présentation captivant et SANS SPOILER (sans révéler la fin) du livre « ${t} »${a ? ` de ${a}` : ''} (environ 100 à 140 mots, sans balises Markdown, en 2 paragraphes séparés par une ligne vide) :
+1. L'histoire de départ et les personnages principaux.
+2. L'ambiance du livre et pourquoi c'est un chef-d'œuvre incontournable.`;
+    }
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      const reponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: consigne }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 600,
+          },
+        }),
+      });
+
+      if (reponse.ok) {
+        const data = await reponse.json();
+        const resumeIA = data.candidates?.[0]?.content?.parts
+          ?.filter((p) => typeof p.text === 'string' && !p.thought)
+          ?.map((p) => p.text)
+          ?.join('\n')
+          ?.trim() || '';
+        if (resumeIA) {
+          return { resume: resumeIA, source: 'ia', mode };
+        }
+      }
+    } catch { /* repli sur Apple Livres ci-dessous */ }
+  }
+
+  // Repli sur la description officielle Apple Livres si l'IA est indisponible
+  if (t) {
+    const meta = await chercherMetaApple({ titre: t, auteur: a });
+    if (meta?.resume) {
+      return { resume: meta.resume, source: 'apple', mode };
+    }
+  }
+
+  throw erreur(503, 'Impossible de générer le résumé pour le moment.');
 }

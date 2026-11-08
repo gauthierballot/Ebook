@@ -3,7 +3,7 @@
 //  - #/ajouter/ID   : ajout des pages (photo → OCR → correction → enregistrement)
 
 import { etat } from '../etat.js';
-import { esc, icones, toast, erreurHTML, messageErreur, libelleType, enregistrerMetaApple } from '../ui.js';
+import { esc, icones, toast, erreurHTML, messageErreur, libelleType, enregistrerMetaApple, ouvrirFeuilleResume } from '../ui.js';
 import { supprimerCache } from '../cache.js';
 
 // Sélection des grands classiques gratuits présents sur Apple Livres + Project Gutenberg (texte intégral vérifié)
@@ -15,6 +15,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication7/v4/c3/ea/2e/c3ea2e71-e8a6-7b2e-38b2-9133445afef2/coverArt.2311cd.jpg/600x600bb.jpg',
+    resume: "En 1815, Jean Valjean est libéré après dix-neuf ans de bagne pour avoir volé un pain. Rejeté de tous, il croise la route de Mgr Myriel qui bouleverse son destin, tandis que le destin tragique de Fantine et de sa petite Cosette se noue sous l'œil implacable de l'inspecteur Javert.",
   },
   {
     id: 17989,
@@ -23,6 +24,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/6b/2e/71/6b2e7171-9764-0336-95f2-fd8d03be90ef/coverArt.c5ee7e.jpg/600x600bb.jpg',
+    resume: "Jeune marin promis à un bel avenir et sur le point d'épouser Mercédès, Edmond Dantès est victime d'un complot jaloux et enfermé au château d'If. Sa rencontre secrète avec l'abbé Faria lui ouvre la voie de la liberté, du trésor de Monte-Cristo et d'une vengeance magistrale.",
   },
   {
     id: 6838,
@@ -31,6 +33,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/9c/30/f8/9c30f83e-c6ab-eb1f-253e-d704d7ff1346/PD_Le_dernier_jour_d_un_condamne-Adj.jpg/600x600bb.jpg',
+    resume: "De sa cellule de Bicêtre jusqu'à l'échafaud de la place de Grève, un homme condamné à mort confie heure par heure ses pensées, ses angoisses, ses souvenirs d'enfance et la douleur déchirante de laisser derrière lui sa petite fille de trois ans. Un plaidoyer bouleversant contre la peine de mort.",
   },
   {
     id: 32854,
@@ -39,6 +42,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication124/v4/42/aa/46/42aa463c-b168-2211-89a1-3c8f71d15134/Lupincover_podklad_fr.jpg/600x600bb.jpg',
+    resume: "Maître du déguisement, de l'ironie et du panache, Arsène Lupin dépouille les châteaux et les milliardaires avec une élégance infaillible. De son arrestation sur un transatlantique à son évasion de la Santé et son premier duel avec Herlock Sholmes, neuf aventures pleines d'esprit et de mystère.",
   },
   {
     id: 20973,
@@ -47,6 +51,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication6/v4/27/06/b8/2706b858-79d6-a463-df8f-d3d95a2a6b99/PDFR001850.jpg/600x600bb.jpg',
+    resume: "Le flegmatique gentleman londonien Phileas Fogg parie la moitié de sa fortune qu'il fera le tour de la Terre en quatre-vingts jours. Accompagné de son fidèle valet français Passepartout et poursuivi par l'inspecteur Fix, il se lance dans une course haletante à travers les continents.",
   },
   {
     id: 5097,
@@ -55,6 +60,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication62/v4/58/50/23/5850238d-daec-7bd3-3293-83839c45e15c/coverArt.a7a47a.jpg/600x600bb.jpg',
+    resume: "Partis traquer un mystérieux monstre marin, le professeur Aronnax, son domestique Conseil et le harponneur Ned Land sont recueillis à bord du Nautilus, le sous-marin prodige de l'énigmatique capitaine Nemo. Commence alors une odyssée inoubliable au cœur des océans.",
   },
   {
     id: 1256,
@@ -63,6 +69,7 @@ const CLASSIQUES_APPLE = [
     type: 'theatre',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/18/9e/7a/189e7a40-e609-8f03-1978-c017a94a3813/coverArt.8b64e8.jpg/600x600bb.jpg',
+    resume: "Bretteur intrépide et poète étincelant affublé d'un nez démesuré, Cyrano aime en secret sa cousine Roxane. Mais Roxane aime le beau Christian, qui manque d'esprit : par amour, Cyrano prête sa voix et ses lettres à son rival dans un chef-d'œuvre de panache et d'émotion.",
   },
   {
     id: 6318,
@@ -71,6 +78,7 @@ const CLASSIQUES_APPLE = [
     type: 'theatre',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication4/v4/19/92/ff/1992fff4-b290-b2f9-5807-64d868c69332/9782806231994.jpg/600x600bb.jpg',
+    resume: "Obsédé par sa cassette d'or enterrée dans son jardin, le vieil Harpagon tyrannise sa maison et prétend marier ses enfants Cléante et Élise contre leur gré tout en convoitant la jeune Mariane. Une comédie incisive et irrésistible sur l'avarice et les passions humaines.",
   },
   {
     id: 10775,
@@ -79,6 +87,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/60/83/4e/60834ea6-55ee-476c-4fdf-d8c9e9513e69/PD_Le_horla-Adj.jpg/600x600bb.jpg',
+    resume: "Sous la forme d'un journal intime, le narrateur raconte comment une présence invisible et troublante — le Horla — s'empare peu à peu de ses nuits, boit l'eau de sa carafe et gouverne sa volonté. Sombre-t-il dans la folie ou un être surnaturel le hante-t-il réellement ?",
   },
   {
     id: 14155,
@@ -87,6 +96,7 @@ const CLASSIQUES_APPLE = [
     type: 'roman',
     langue: 'fr',
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication211/v4/fd/4f/30/fd4f300a-e01a-84ad-034e-0ecf578e4853/303e0c05-2e3a-4cc2-aecc-cdbea53f8a07_cover_image.jpg/600x600bb.jpg',
+    resume: "Nourrie de lectures romantiques, Emma épouse Charles Bovary, modeste médecin de province, mais étouffe rapidement dans la monotonie conjugale. Rêvant de luxe et de passions ardentes, elle cherche l'évasion dans l'adultère et les dépenses jusqu'au vertige.",
   },
 ];
 
@@ -165,12 +175,15 @@ function afficherFormulaire(racine) {
       </p>
       <div class="grille-classiques-apple" id="grille-classiques">
         ${CLASSIQUES_APPLE.map((c, idx) => `
-          <button type="button" class="carte-classique-apple" data-classique-idx="${idx}" aria-label="Importer intégralement ${esc(c.titre)} de ${esc(c.auteur)}">
-            <img class="couv-mini" src="${esc(c.couverture)}" alt="" loading="lazy">
+          <div class="carte-classique-apple">
+            <img class="couv-mini" src="${esc(c.couverture)}" alt="${esc(c.titre)}" loading="lazy" data-classique-resume="${idx}" style="cursor:pointer" title="Voir le résumé">
             <span class="titre-mini">${esc(c.titre)}</span>
             <span class="auteur-mini">${esc(c.auteur)}</span>
-            <span class="badge-gratuit">📥 Gratuit · 1 clic</span>
-          </button>
+            <div class="actions-classique-mini">
+              <button type="button" class="btn-mini-resume" data-classique-resume="${idx}" aria-label="Voir le résumé de ${esc(c.titre)}">📖 Résumé</button>
+              <button type="button" class="badge-gratuit" data-classique-idx="${idx}" aria-label="Importer intégralement ${esc(c.titre)}">📥 Importer</button>
+            </div>
+          </div>
         `).join('')}
       </div>
     </section>
@@ -187,25 +200,48 @@ function afficherFormulaire(racine) {
   let delaiRecherche = null;
   let ocrModule = null;
 
-  // --- Clic sur un classique de la sélection Apple Livres ---
+  function selectionnerClassique(c, importerDirect = false) {
+    if (!c) return;
+    form.titre.value = c.titre;
+    form.auteur.value = c.auteur;
+    form.querySelector(c.type === 'theatre' ? '#type-theatre' : '#type-roman').checked = true;
+    form.querySelector('#langue-fr').checked = true;
+    enregistrerMetaApple(c.titre, c.auteur, { couverture: c.couverture, resume: c.resume || '' });
+    afficherResultatLibre([{
+      id: c.id,
+      titre: c.titre,
+      auteur: c.auteur,
+      libre: true,
+      couverture: c.couverture,
+      resume: c.resume || '',
+    }], { couverture: c.couverture, resume: c.resume || '' });
+    if (importerDirect) {
+      zoneLibre.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      lancerImportComplet(c.id, { couverture: c.couverture, resume: c.resume || '' });
+    }
+  }
+
+  // --- Clic sur « Importer » d'un classique de la sélection Apple Livres ---
   racine.querySelectorAll('[data-classique-idx]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const c = CLASSIQUES_APPLE[Number(btn.getAttribute('data-classique-idx'))];
+      selectionnerClassique(c, true);
+    });
+  });
+
+  // --- Clic sur « 📖 Résumé » ou sur la couverture d'un classique gratuit ---
+  racine.querySelectorAll('[data-classique-resume]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const c = CLASSIQUES_APPLE[Number(el.getAttribute('data-classique-resume'))];
       if (!c) return;
-      form.titre.value = c.titre;
-      form.auteur.value = c.auteur;
-      form.querySelector(c.type === 'theatre' ? '#type-theatre' : '#type-roman').checked = true;
-      form.querySelector('#langue-fr').checked = true;
-      enregistrerMetaApple(c.titre, c.auteur, { couverture: c.couverture, resume: '' });
-      afficherResultatLibre([{
-        id: c.id,
+      ouvrirFeuilleResume({
         titre: c.titre,
         auteur: c.auteur,
-        libre: true,
         couverture: c.couverture,
-      }], { couverture: c.couverture });
-      zoneLibre.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      lancerImportComplet(c.id, { couverture: c.couverture });
+        resumeInitial: c.resume || '',
+        token: etat.session?.access_token,
+        surImporter: () => selectionnerClassique(c, true),
+      });
     });
   });
 
@@ -356,11 +392,30 @@ function afficherFormulaire(racine) {
           <p style="margin:0 0 12px;font-size:.9rem;">
             Ce classique fait partie du <strong>domaine public</strong> (auteur décédé il y a plus de 70 ans). Tu peux importer son texte intégral et sa couverture officielle en 1 clic !
           </p>
-          <button type="button" class="btn btn-succes btn-bloc" id="btn-import-libre">
-            📥 Importer tout le livre en 1 clic
-          </button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-secondaire" id="btn-resume-libre" style="flex:1;min-width:140px">
+              📖 Voir le résumé
+            </button>
+            <button type="button" class="btn btn-succes" id="btn-import-libre" style="flex:2;min-width:180px">
+              📥 Importer tout le livre en 1 clic
+            </button>
+          </div>
           <p class="aide" style="margin-top:8px;text-align:center;font-size:.8rem;">Ou continue ci-dessous pour numériser tes propres pages manuellement.</p>
         </div>`;
+
+      zoneLibre.querySelector('#btn-resume-libre').addEventListener('click', () => {
+        ouvrirFeuilleResume({
+          titre: libre.titre || titreSaisi,
+          auteur: libre.auteur || auteurSaisi,
+          couverture: libre.couverture || metaApple?.couverture || '',
+          resumeInitial: libre.resume || metaApple?.resume || '',
+          token: etat.session?.access_token,
+          surImporter: () => lancerImportComplet(libre.id, {
+            couverture: libre.couverture || metaApple?.couverture,
+            resume: libre.resume || metaApple?.resume,
+          }),
+        });
+      });
 
       zoneLibre.querySelector('#btn-import-libre').addEventListener('click', () => lancerImportComplet(libre.id, {
         couverture: libre.couverture || metaApple?.couverture,
