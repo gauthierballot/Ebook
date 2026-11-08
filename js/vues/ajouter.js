@@ -1,5 +1,5 @@
 // Vue « Ajouter » :
-//  - #/ajouter      : formulaire du nouveau livre
+//  - #/ajouter      : formulaire du nouveau livre + détection couverture + import domaine public
 //  - #/ajouter/ID   : ajout des pages (photo → OCR → correction → enregistrement)
 
 import { etat } from '../etat.js';
@@ -12,14 +12,31 @@ export async function afficher(racine, { params }) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Formulaire « nouveau livre »
+// 1. Formulaire « nouveau livre » avec détection de couverture et import libre
 // ---------------------------------------------------------------------------
 function afficherFormulaire(racine) {
   racine.innerHTML = `
     <div class="etapes" aria-hidden="true"><span class="actif"></span><span></span></div>
     <p class="surtitre">Étape 1 sur 2</p>
     <h1 class="titre-page">Nouveau livre</h1>
-    <p class="sous-titre">Quelques infos, puis tu photographieras les pages.</p>
+    <p class="sous-titre">Renseigne le livre ou prends sa couverture en photo.</p>
+
+    <!-- Zone de détection automatique par photo de couverture -->
+    <div class="carte-couverture" id="zone-couverture">
+      <p class="titre-3" style="font-size:1.15rem;margin-bottom:4px">📸 Couverture ou page de garde</p>
+      <p class="aide" style="margin-bottom:12px">Prends la couverture en photo : l'IA identifie le livre et vérifie si la version complète est disponible gratuitement.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <input type="file" id="couv-camera" class="visuellement-cache" accept="image/*" capture="environment">
+        <label for="couv-camera" class="btn btn-secondaire" style="font-size:.92rem;min-height:42px;padding:8px 16px;">
+          ${icones.photo} Appareil photo
+        </label>
+        <input type="file" id="couv-galerie" class="visuellement-cache" accept="image/*">
+        <label for="couv-galerie" class="btn btn-discret" style="font-size:.92rem;min-height:42px;padding:8px 16px;">
+          ${icones.galerie} Galerie
+        </label>
+      </div>
+      <div id="couv-statut" style="display:none;margin-top:12px;font-size:.92rem;"></div>
+    </div>
 
     <form class="carte" id="form-livre" novalidate>
       <div id="form-message"></div>
@@ -48,6 +65,10 @@ function afficherFormulaire(racine) {
         </div>
         <p class="aide">En anglais, tu pourras traduire un mot ou une page pendant la lecture.</p>
       </fieldset>
+
+      <!-- Zone de résultat de la bibliothèque libre -->
+      <div id="zone-libre"></div>
+
       <button class="btn btn-primaire btn-bloc" type="submit">Continuer ${icones.suivant}</button>
     </form>
     <p class="aide" style="margin-top:16px;text-align:center;color:var(--texte-2);font-size:.85rem">
@@ -56,7 +77,225 @@ function afficherFormulaire(racine) {
 
   const form = racine.querySelector('#form-livre');
   const zoneMessage = racine.querySelector('#form-message');
+  const zoneLibre = racine.querySelector('#zone-libre');
+  const couvStatut = racine.querySelector('#couv-statut');
 
+  let delaiRecherche = null;
+  let ocrModule = null;
+
+  // --- Gestion de la photo de couverture / page de garde ---
+  async function traiterCouverture(fichier) {
+    if (!fichier || (!fichier.type.startsWith('image/') && fichier.type !== '')) {
+      toast('Sélectionne une image valide.');
+      return;
+    }
+    couvStatut.style.display = 'block';
+    couvStatut.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Analyse de la couverture par l\'IA…';
+
+    try {
+      ocrModule = ocrModule || await import('../ocr.js');
+      const base64 = await ocrModule.preparerPourGemini(fichier);
+
+      const token = etat.session?.access_token;
+      const r = await fetch('/api/livre-libre', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ action: 'analyser-couverture', image: base64 }),
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.erreur || 'Impossible d\'analyser la couverture.');
+      }
+
+      const donnees = await r.json();
+      couvStatut.innerHTML = '<span style="color:var(--succes)">✓ Titre et auteur identifiés !</span>';
+
+      if (donnees.titre) form.titre.value = donnees.titre;
+      if (donnees.auteur) form.auteur.value = donnees.auteur;
+      if (donnees.type === 'theatre') {
+        form.querySelector('#type-theatre').checked = true;
+      } else {
+        form.querySelector('#type-roman').checked = true;
+      }
+      if (donnees.langue === 'en') {
+        form.querySelector('#langue-en').checked = true;
+      } else {
+        form.querySelector('#langue-fr').checked = true;
+      }
+
+      afficherResultatLibre(donnees.resultats || []);
+    } catch (e) {
+      couvStatut.innerHTML = `<span style="color:var(--danger)">${esc(e.message || 'Échec de l\'analyse')}</span>`;
+    }
+  }
+
+  racine.querySelector('#couv-camera').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) traiterCouverture(f);
+  });
+  racine.querySelector('#couv-galerie').addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (f) traiterCouverture(f);
+  });
+
+  // --- Recherche automatique lors de la saisie ---
+  function planifierRecherche() {
+    clearTimeout(delaiRecherche);
+    const titre = form.titre.value.trim();
+    const auteur = form.auteur.value.trim();
+    if (titre.length < 3) {
+      zoneLibre.innerHTML = '';
+      return;
+    }
+    zoneLibre.innerHTML = '<p class="aide" style="margin:10px 0;"><span class="roue petite" aria-hidden="true"></span> Recherche dans la bibliothèque libre…</p>';
+    delaiRecherche = setTimeout(async () => {
+      try {
+        const token = etat.session?.access_token;
+        const r = await fetch('/api/livre-libre', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'chercher',
+            titre,
+            auteur,
+            langue: form.langue.value,
+          }),
+        });
+        if (!r.ok) {
+          zoneLibre.innerHTML = '';
+          return;
+        }
+        const { resultats } = await r.json();
+        afficherResultatLibre(resultats || []);
+      } catch {
+        zoneLibre.innerHTML = '';
+      }
+    }, 600);
+  }
+
+  form.titre.addEventListener('input', planifierRecherche);
+  form.auteur.addEventListener('input', planifierRecherche);
+  form.querySelectorAll('input[name="langue"]').forEach((i) => i.addEventListener('change', planifierRecherche));
+
+  // --- Affichage du résultat et proposition d'import ---
+  function afficherResultatLibre(resultats) {
+    if (!resultats || !resultats.length) {
+      zoneLibre.innerHTML = `
+        <div class="carte-libre-refuse">
+          <p style="margin:0 0 4px;font-weight:600;color:var(--texte);">🔒 Livre absent de la bibliothèque libre ou sous droits d'auteur</p>
+          <p style="margin:0;">Seuls les ouvrages du domaine public peuvent être importés en 1 clic. Tu pourras numériser tes propres pages papier avec l'appareil photo à l'étape suivante.</p>
+        </div>`;
+      return;
+    }
+
+    const libre = resultats.find((r) => r.libre) || resultats[0];
+
+    if (libre.libre) {
+      zoneLibre.innerHTML = `
+        <div class="carte-libre-trouve">
+          <span class="badge-domaine-public">✨ Version complète disponible</span>
+          <h3 style="font-size:1.1rem;margin:4px 0 2px;">${esc(libre.titre)}</h3>
+          <p style="margin:0 0 8px;color:var(--texte-2);font-size:.88rem;">${esc(libre.auteur)}${libre.annees ? ' (' + esc(libre.annees) + ')' : ''}</p>
+          <p style="margin:0 0 12px;font-size:.9rem;">
+            Ce livre fait partie du <strong>domaine public</strong>. Tu peux importer immédiatement son texte intégral au lieu de photographier chaque page !
+          </p>
+          <button type="button" class="btn btn-succes btn-bloc" id="btn-import-libre">
+            📥 Importer tout le livre en 1 clic
+          </button>
+          <p class="aide" style="margin-top:8px;text-align:center;font-size:.8rem;">Ou continue ci-dessous pour numériser tes propres pages manuellement.</p>
+        </div>`;
+
+      zoneLibre.querySelector('#btn-import-libre').addEventListener('click', () => lancerImportComplet(libre.id));
+    } else {
+      zoneLibre.innerHTML = `
+        <div class="carte-libre-refuse">
+          <p style="margin:0 0 4px;font-weight:600;color:var(--texte);">🔒 Livre protégé par les droits d'auteur</p>
+          <p style="margin:0 0 6px;">${esc(libre.raison || "Ce livre est encore sous droits d'auteur.")}</p>
+          <p style="margin:0;font-size:.82rem;">Ebook respecte la législation : seuls les livres libres sont téléchargeables. Continue ci-dessous pour créer le livre et numériser tes pages personnelles avec l'appareil photo.</p>
+        </div>`;
+    }
+  }
+
+  // --- Import intégral en 1 clic ---
+  async function lancerImportComplet(idGutenberg) {
+    const bouton = zoneLibre.querySelector('#btn-import-libre');
+    if (bouton) {
+      bouton.disabled = true;
+      bouton.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Récupération et pagination du texte…';
+    }
+
+    try {
+      const token = etat.session?.access_token;
+      const r = await fetch('/api/livre-libre', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'importer',
+          id: idGutenberg,
+          type: form.type.value,
+        }),
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.erreur || "Impossible d'importer le texte de ce livre.");
+      }
+
+      const { titre, pages } = await r.json();
+      if (bouton) bouton.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
+
+      // 1. Créer le livre dans Supabase
+      const { data: livreCree, error: errLivre } = await etat.supabase
+        .from('books')
+        .insert({
+          titre: form.titre.value.trim() || titre,
+          auteur: form.auteur.value.trim(),
+          type: form.type.value,
+          langue: form.langue.value,
+          user_id: etat.user.id,
+        })
+        .select('id')
+        .single();
+
+      if (errLivre) throw errLivre;
+
+      // 2. Insérer toutes les pages par lots de 50
+      const tailleLot = 50;
+      for (let i = 0; i < pages.length; i += tailleLot) {
+        const lot = pages.slice(i, i + tailleLot).map((texte, idx) => ({
+          book_id: livreCree.id,
+          numero: i + idx + 1,
+          texte,
+        }));
+        const { error: errPages } = await etat.supabase.from('pages').insert(lot);
+        if (errPages) throw errPages;
+      }
+
+      supprimerCache(`bibliotheque:${etat.user.id}`);
+      toast(`Livre intégral importé avec succès (${pages.length} pages) !`);
+      location.hash = `#/lecteur/${livreCree.id}`;
+    } catch (e) {
+      if (bouton) {
+        bouton.disabled = false;
+        bouton.innerHTML = '📥 Réessayer l\'import';
+      }
+      zoneMessage.innerHTML = `<p class="message message-erreur" role="alert">${esc(messageErreur(e))}</p>`;
+    }
+  }
+
+  // --- Soumission manuelle normale vers l'étape 2 (appareil photo) ---
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const champTitre = form.titre;
@@ -167,6 +406,14 @@ async function afficherPages(racine, idLivre) {
           <span>Saisir le texte à la main<small>Si la photo ne fonctionne pas</small></span>
         </button>
       </div>
+      ${numero === 1 && pagesAjoutees === 0 ? `
+        <div id="zone-import-libre-rapide" style="margin-top:18px;border-top:1px solid var(--bordure);padding-top:16px;">
+          <button type="button" class="btn btn-discret btn-bloc" data-action="chercher-libre">
+            ✨ Vérifier si ce livre existe en version complète gratuite
+          </button>
+          <div id="retour-libre-rapide" style="margin-top:10px;"></div>
+        </div>
+      ` : ''}
       ${pagesAjoutees || numero > 1 ? `<div class="actions colonne"><a class="btn btn-secondaire" href="#/lecteur/${livre.id}">Terminer</a></div>` : ''}`;
 
     zone.querySelectorAll('input[type="file"]').forEach((input) => {
@@ -177,6 +424,89 @@ async function afficherPages(racine, idLivre) {
       });
     });
     zone.querySelector('[data-action="manuel"]').addEventListener('click', () => etapeCorrection('', null));
+
+    const btnChercherLibre = zone.querySelector('[data-action="chercher-libre"]');
+    const zoneRetourRapide = zone.querySelector('#retour-libre-rapide');
+    if (btnChercherLibre && zoneRetourRapide) {
+      btnChercherLibre.addEventListener('click', async () => {
+        btnChercherLibre.disabled = true;
+        btnChercherLibre.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Recherche en cours…';
+        try {
+          const token = etat.session?.access_token;
+          const r = await fetch('/api/livre-libre', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'chercher',
+              titre: livre.titre,
+              auteur: livre.auteur,
+              langue: livre.langue,
+            }),
+          });
+          const { resultats = [] } = await r.json();
+          const match = resultats.find((x) => x.libre);
+          if (match) {
+            zoneRetourRapide.innerHTML = `
+              <div class="carte-libre-trouve" style="margin:0;">
+                <span class="badge-domaine-public">✨ Version complète trouvée</span>
+                <p style="margin:4px 0 10px;font-size:.9rem;">
+                  <strong>${esc(match.titre)}</strong> (${esc(match.auteur)}) est dans le domaine public !
+                </p>
+                <button type="button" class="btn btn-succes btn-bloc" id="btn-remplir-livre">
+                  📥 Importer toutes les pages maintenant
+                </button>
+              </div>`;
+            zoneRetourRapide.querySelector('#btn-remplir-livre').addEventListener('click', async (e) => {
+              const b = e.currentTarget;
+              b.disabled = true;
+              b.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Récupération et pagination…';
+              try {
+                const rImp = await fetch('/api/livre-libre', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({ action: 'importer', id: match.id, type: livre.type }),
+                });
+                const { pages = [] } = await rImp.json();
+                b.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
+                const tailleLot = 50;
+                for (let i = 0; i < pages.length; i += tailleLot) {
+                  const lot = pages.slice(i, i + tailleLot).map((texte, idx) => ({
+                    book_id: livre.id,
+                    numero: i + idx + 1,
+                    texte,
+                  }));
+                  await etat.supabase.from('pages').insert(lot);
+                }
+                supprimerCache(`bibliotheque:${etat.user.id}`);
+                supprimerCache(`livre:${livre.id}`);
+                toast(`Livre complet importé (${pages.length} pages) !`);
+                location.hash = `#/lecteur/${livre.id}`;
+              } catch (err) {
+                b.disabled = false;
+                b.innerHTML = '📥 Réessayer';
+                toast(messageErreur(err));
+              }
+            });
+          } else {
+            zoneRetourRapide.innerHTML = `
+              <div class="carte-libre-refuse" style="margin:0;">
+                🔒 Ce livre n'est pas disponible dans le domaine public (ou est encore protégé par le droit d'auteur). Continue avec l'appareil photo ci-dessus !
+              </div>`;
+            btnChercherLibre.style.display = 'none';
+          }
+        } catch {
+          btnChercherLibre.disabled = false;
+          btnChercherLibre.innerHTML = '✨ Vérifier si ce livre existe en version complète gratuite';
+          zoneRetourRapide.innerHTML = '<p class="message message-erreur" style="margin:0;font-size:.85rem;">Impossible de joindre la bibliothèque libre.</p>';
+        }
+      });
+    }
   }
 
   // --- État : lecture en cours ---

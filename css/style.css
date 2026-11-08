@@ -200,6 +200,8 @@ body.mode-lecture .contenu { max-width: none; padding: 0; }
 
 .btn-primaire { background: var(--primaire); color: var(--sur-primaire); box-shadow: 0 6px 18px rgba(36, 71, 200, .28); }
 .btn-primaire:hover { background: var(--primaire-survol); }
+.btn-succes { background: var(--succes); color: #FFFFFF; box-shadow: 0 6px 18px color-mix(in srgb, var(--succes) 28%, transparent); }
+.btn-succes:hover { filter: brightness(1.08); }
 .btn-secondaire { background: var(--surface); color: var(--texte); border-color: var(--bordure); }
 .btn-secondaire:hover { background: var(--fond-2); }
 .btn-discret { background: transparent; color: var(--accent); padding-inline: 14px; }
@@ -249,6 +251,51 @@ body.mode-lecture .contenu { max-width: none; padding: 0; }
   border-radius: var(--rayon); padding: 22px; box-shadow: var(--ombre-1);
 }
 .carte + .carte { margin-top: 18px; }
+
+/* Détection de couverture & import de livres libres */
+.carte-couverture {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--fond-2) 100%);
+  border: 1.5px dashed var(--bordure);
+  text-align: center;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  border-radius: var(--rayon);
+  transition: border-color var(--transition);
+}
+.carte-couverture:hover { border-color: var(--accent); }
+.carte-libre-trouve {
+  background: color-mix(in srgb, var(--succes) 8%, var(--surface));
+  border: 1.5px solid color-mix(in srgb, var(--succes) 35%, transparent);
+  border-radius: var(--rayon-petit);
+  padding: 16px 18px;
+  margin: 16px 0;
+  animation: apparition 300ms var(--transition) both;
+}
+.carte-libre-refuse {
+  background: var(--fond-2);
+  border: 1px solid var(--bordure);
+  border-radius: var(--rayon-petit);
+  padding: 14px 16px;
+  margin: 16px 0;
+  font-size: .88rem;
+  color: var(--texte-2);
+  line-height: 1.5;
+  animation: apparition 300ms var(--transition) both;
+}
+.badge-domaine-public {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  background: color-mix(in srgb, var(--succes) 18%, transparent);
+  color: var(--succes);
+  margin-bottom: 8px;
+}
 
 .champ { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
 .champ label, .champ legend, .etiquette { font-weight: 600; font-size: .92rem; }
