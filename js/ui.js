@@ -91,10 +91,54 @@ export function teinteDepuisTexte(texte) {
   return palette[h % palette.length];
 }
 
-/** Couverture générée en CSS. */
+/** Clé de cache local pour la couverture et le résumé Apple Livres. */
+function cleMetaApple(titre = '', auteur = '') {
+  const norm = `${titre}__${auteur}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  return `ebook:apple:v1:${norm}`;
+}
+
+export function lireMetaApple(titre, auteur) {
+  try {
+    const brut = localStorage.getItem(cleMetaApple(titre, auteur));
+    return brut ? JSON.parse(brut) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function enregistrerMetaApple(titre, auteur, meta) {
+  if (!titre || !meta) return;
+  try {
+    localStorage.setItem(cleMetaApple(titre, auteur), JSON.stringify({
+      couverture: meta.couverture || null,
+      resume: meta.resume || '',
+      ts: Date.now(),
+    }));
+  } catch { /* quota atteint : ignoré */ }
+}
+
+/** Couverture avec image officielle Apple Livres (ou couverture CSS dorée en secours). */
 export function couvertureHTML(livre, { grande = false } = {}) {
   const h = teinteDepuisTexte(livre.titre);
-  return `<div class="couverture ${grande ? 'grande' : ''}" style="--h:${h}" aria-hidden="true">
+  const enCache = lireMetaApple(livre.titre, livre.auteur);
+  const urlCouv = livre.couverture || enCache?.couverture || '';
+  const besoinRecherche = !urlCouv && !enCache;
+
+  const attrsAuto = besoinRecherche
+    ? ` data-couv-auto data-titre="${esc(livre.titre)}" data-auteur="${esc(livre.auteur || '')}" data-langue="${esc(livre.langue || 'fr')}"`
+    : '';
+
+  const imgHTML = urlCouv
+    ? `<img class="couv-img" src="${esc(urlCouv)}" alt="" loading="lazy" onerror="this.remove()">`
+    : '';
+
+  return `<div class="couverture ${grande ? 'grande' : ''}" style="--h:${h}" aria-hidden="true"${attrsAuto}>
+    ${imgHTML}
     <span class="couv-type">${esc(libelleType[livre.type] || '')}</span>
     <div>
       <div class="couv-titre">${esc(livre.titre)}</div>
@@ -102,6 +146,61 @@ export function couvertureHTML(livre, { grande = false } = {}) {
       <div class="couv-auteur">${esc(livre.auteur || 'Auteur inconnu')}</div>
     </div>
   </div>`;
+}
+
+/**
+ * Recherche automatiquement sur l'API Apple Livres les couvertures manquantes
+ * présentes dans un conteneur DOM et les met en cache.
+ */
+export async function hydraterCouvertures(racine = document) {
+  const blocs = [...racine.querySelectorAll('[data-couv-auto]')];
+  if (!blocs.length) return;
+
+  await Promise.allSettled(blocs.map(async (el) => {
+    const titre = el.getAttribute('data-titre') || '';
+    const auteur = el.getAttribute('data-auteur') || '';
+    const langue = el.getAttribute('data-langue') || 'fr';
+    el.removeAttribute('data-couv-auto');
+    if (!titre) return;
+
+    const deja = lireMetaApple(titre, auteur);
+    if (deja) {
+      if (deja.couverture) injecterImageCouv(el, deja.couverture);
+      return;
+    }
+
+    try {
+      const pays = langue === 'en' ? 'us' : 'fr';
+      const terme = `${titre} ${auteur}`.trim();
+      const r = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(terme)}&entity=ebook&country=${pays}&limit=4`);
+      if (!r.ok) return;
+      const json = await r.json();
+      const items = Array.isArray(json.results) ? json.results : [];
+      const meilleur = items.find((x) => x.price === 0 && x.artworkUrl100) || items.find((x) => x.artworkUrl100);
+      const couverture = (meilleur?.artworkUrl100 || '')
+        .replace(/\d+x\d+bb/, '600x600bb') || null;
+      const resume = String(meilleur?.description || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .trim()
+        .slice(0, 600);
+
+      enregistrerMetaApple(titre, auteur, { couverture, resume });
+      if (couverture) injecterImageCouv(el, couverture);
+    } catch { /* réseau indisponible : on garde la couverture CSS */ }
+  }));
+}
+
+function injecterImageCouv(el, url) {
+  if (!el || el.querySelector('.couv-img')) return;
+  const img = document.createElement('img');
+  img.className = 'couv-img';
+  img.src = url;
+  img.alt = '';
+  img.loading = 'lazy';
+  img.onerror = () => img.remove();
+  el.prepend(img);
 }
 
 /** Étoiles en lecture seule. */

@@ -296,6 +296,93 @@ body.mode-lecture .contenu { max-width: none; padding: 0; }
   color: var(--succes);
   margin-bottom: 8px;
 }
+.apercu-apple {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.apercu-apple-img {
+  width: 78px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px 10px 10px 4px;
+  box-shadow: var(--ombre-1);
+  flex-shrink: 0;
+  background: var(--fond-2);
+}
+.apercu-apple-corps {
+  flex: 1;
+  min-width: 0;
+}
+.apercu-apple-resume {
+  font-size: .84rem;
+  color: var(--texte-2);
+  margin: 6px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+}
+.section-classiques-apple {
+  margin-top: 26px;
+}
+.grille-classiques-apple {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 16px 14px;
+  margin-top: 14px;
+}
+.carte-classique-apple {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: 14px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+.carte-classique-apple:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: var(--ombre-1);
+}
+.carte-classique-apple .couv-mini {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px 10px 10px 4px;
+  box-shadow: 0 4px 12px rgba(14, 20, 60, .16);
+  margin-bottom: 8px;
+  background: var(--fond-2);
+}
+.carte-classique-apple .titre-mini {
+  font-weight: 600;
+  font-size: .84rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 2px;
+}
+.carte-classique-apple .auteur-mini {
+  font-size: .75rem;
+  color: var(--texte-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.carte-classique-apple .badge-gratuit {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--succes);
+}
 
 .champ { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
 .champ label, .champ legend, .etiquette { font-weight: 600; font-size: .92rem; }
@@ -435,12 +522,17 @@ body.mode-lecture .toasts { bottom: calc(90px + env(safe-area-inset-bottom)); }
   transition: transform var(--transition), box-shadow var(--transition);
 }
 .couverture::before { /* dos du livre */
-  content: ""; position: absolute; inset: 0 auto 0 0; width: 7%;
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 7%; z-index: 3; pointer-events: none;
   background: linear-gradient(90deg, rgba(0, 0, 0, .28), rgba(255, 255, 255, .08) 70%, rgba(0, 0, 0, .1));
 }
 .couverture::after { /* filet doré */
   content: ""; position: absolute; inset: 7% 7% 7% 12%;
   border: 1px solid rgba(240, 214, 150, .45); border-radius: 3px; pointer-events: none;
+}
+.couv-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 2; border-radius: inherit;
+  animation: fondu 280ms ease both;
 }
 .couv-type { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; opacity: .8; font-weight: 500; }
 .couv-titre {

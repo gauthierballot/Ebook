@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { etat } from '../etat.js';
-import { esc, icones, couvertureHTML, erreurHTML, messageErreur, toast, confirmer, libelleType, libelleLangue, formatDate, ouvrirFeuille } from '../ui.js';
+import { esc, icones, couvertureHTML, hydraterCouvertures, lireMetaApple, erreurHTML, messageErreur, toast, confirmer, libelleType, libelleLangue, formatDate, ouvrirFeuille } from '../ui.js';
 import { monterAvis } from '../avis.js';
 import { supprimerCache } from '../cache.js';
 
@@ -51,6 +51,8 @@ export async function afficher(racine, { params }) {
           <li>Ajouté le ${formatDate(livre.created_at)}</li>
         </ul>
 
+        <p id="fiche-resume-apple" class="aide" style="margin-top:12px;text-align:left;line-height:1.5;display:none"></p>
+
         <div class="actions" style="margin-top:20px">
           ${nbPages > 0
             ? `<a class="btn btn-primaire" href="#/lecteur/${livre.id}">${icones.livre} Lire (p. ${dernierePage})</a>`
@@ -64,6 +66,18 @@ export async function afficher(racine, { params }) {
 
       <div class="zone-avis-fiche"></div>
     </div>`;
+
+  // Hydrater la couverture officielle Apple Livres et afficher le résumé s'il existe
+  const majResume = () => {
+    const meta = lireMetaApple(livre.titre, livre.auteur);
+    const elResume = racine.querySelector('#fiche-resume-apple');
+    if (elResume && meta?.resume) {
+      elResume.textContent = meta.resume;
+      elResume.style.display = 'block';
+    }
+  };
+  majResume();
+  hydraterCouvertures(racine).then(majResume);
 
   // Monter les avis
   const zoneAvis = racine.querySelector('.zone-avis-fiche');

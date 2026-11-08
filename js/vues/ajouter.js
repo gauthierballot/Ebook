@@ -3,8 +3,92 @@
 //  - #/ajouter/ID   : ajout des pages (photo → OCR → correction → enregistrement)
 
 import { etat } from '../etat.js';
-import { esc, icones, toast, erreurHTML, messageErreur, libelleType } from '../ui.js';
+import { esc, icones, toast, erreurHTML, messageErreur, libelleType, enregistrerMetaApple } from '../ui.js';
 import { supprimerCache } from '../cache.js';
+
+// Sélection des grands classiques gratuits présents sur Apple Livres + Project Gutenberg (texte intégral vérifié)
+const CLASSIQUES_APPLE = [
+  {
+    id: 17489,
+    titre: 'Les Misérables — Tome I',
+    auteur: 'Victor Hugo',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication7/v4/c3/ea/2e/c3ea2e71-e8a6-7b2e-38b2-9133445afef2/coverArt.2311cd.jpg/600x600bb.jpg',
+  },
+  {
+    id: 17989,
+    titre: 'Le Comte de Monte-Cristo — Tome I',
+    auteur: 'Alexandre Dumas',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/6b/2e/71/6b2e7171-9764-0336-95f2-fd8d03be90ef/coverArt.c5ee7e.jpg/600x600bb.jpg',
+  },
+  {
+    id: 6838,
+    titre: "Le Dernier Jour d'un condamné",
+    auteur: 'Victor Hugo',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/9c/30/f8/9c30f83e-c6ab-eb1f-253e-d704d7ff1346/PD_Le_dernier_jour_d_un_condamne-Adj.jpg/600x600bb.jpg',
+  },
+  {
+    id: 32854,
+    titre: 'Arsène Lupin, gentleman-cambrioleur',
+    auteur: 'Maurice Leblanc',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication124/v4/42/aa/46/42aa463c-b168-2211-89a1-3c8f71d15134/Lupincover_podklad_fr.jpg/600x600bb.jpg',
+  },
+  {
+    id: 20973,
+    titre: 'Le Tour du monde en 80 jours',
+    auteur: 'Jules Verne',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication6/v4/27/06/b8/2706b858-79d6-a463-df8f-d3d95a2a6b99/PDFR001850.jpg/600x600bb.jpg',
+  },
+  {
+    id: 5097,
+    titre: 'Vingt mille lieues sous les mers',
+    auteur: 'Jules Verne',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication62/v4/58/50/23/5850238d-daec-7bd3-3293-83839c45e15c/coverArt.a7a47a.jpg/600x600bb.jpg',
+  },
+  {
+    id: 1256,
+    titre: 'Cyrano de Bergerac',
+    auteur: 'Edmond Rostand',
+    type: 'theatre',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/18/9e/7a/189e7a40-e609-8f03-1978-c017a94a3813/coverArt.8b64e8.jpg/600x600bb.jpg',
+  },
+  {
+    id: 6318,
+    titre: "L'Avare",
+    auteur: 'Molière',
+    type: 'theatre',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication4/v4/19/92/ff/1992fff4-b290-b2f9-5807-64d868c69332/9782806231994.jpg/600x600bb.jpg',
+  },
+  {
+    id: 10775,
+    titre: 'Le Horla',
+    auteur: 'Guy de Maupassant',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/60/83/4e/60834ea6-55ee-476c-4fdf-d8c9e9513e69/PD_Le_horla-Adj.jpg/600x600bb.jpg',
+  },
+  {
+    id: 14155,
+    titre: 'Madame Bovary',
+    auteur: 'Gustave Flaubert',
+    type: 'roman',
+    langue: 'fr',
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication211/v4/fd/4f/30/fd4f300a-e01a-84ad-034e-0ecf578e4853/303e0c05-2e3a-4cc2-aecc-cdbea53f8a07_cover_image.jpg/600x600bb.jpg',
+  },
+];
 
 export async function afficher(racine, { params }) {
   if (params[0]) return afficherPages(racine, params[0]);
@@ -71,6 +155,26 @@ function afficherFormulaire(racine) {
 
       <button class="btn btn-primaire btn-bloc" type="submit">Continuer ${icones.suivant}</button>
     </form>
+
+    <!-- Catalogue des grands classiques gratuits d'Apple Livres + Gutenberg -->
+    <section class="carte section-classiques-apple" aria-labelledby="titre-classiques-apple">
+      <p class="surtitre">Sélection Apple Livres & Domaine Public</p>
+      <h2 class="titre-3" id="titre-classiques-apple" style="margin-bottom:4px">📚 Grands classiques gratuits en 1 clic</h2>
+      <p class="aide" style="color:var(--texte-2);margin-bottom:8px">
+        Ces classiques gratuits sur Apple Livres ont plus de 70 ans : clique sur une couverture pour ajouter directement tout le livre dans ta bibliothèque.
+      </p>
+      <div class="grille-classiques-apple" id="grille-classiques">
+        ${CLASSIQUES_APPLE.map((c, idx) => `
+          <button type="button" class="carte-classique-apple" data-classique-idx="${idx}" aria-label="Importer intégralement ${esc(c.titre)} de ${esc(c.auteur)}">
+            <img class="couv-mini" src="${esc(c.couverture)}" alt="" loading="lazy">
+            <span class="titre-mini">${esc(c.titre)}</span>
+            <span class="auteur-mini">${esc(c.auteur)}</span>
+            <span class="badge-gratuit">📥 Gratuit · 1 clic</span>
+          </button>
+        `).join('')}
+      </div>
+    </section>
+
     <p class="aide" style="margin-top:16px;text-align:center;color:var(--texte-2);font-size:.85rem">
       N'ajoute que des livres que tu possèdes, pour ton usage personnel.
     </p>`;
@@ -82,6 +186,28 @@ function afficherFormulaire(racine) {
 
   let delaiRecherche = null;
   let ocrModule = null;
+
+  // --- Clic sur un classique de la sélection Apple Livres ---
+  racine.querySelectorAll('[data-classique-idx]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const c = CLASSIQUES_APPLE[Number(btn.getAttribute('data-classique-idx'))];
+      if (!c) return;
+      form.titre.value = c.titre;
+      form.auteur.value = c.auteur;
+      form.querySelector(c.type === 'theatre' ? '#type-theatre' : '#type-roman').checked = true;
+      form.querySelector('#langue-fr').checked = true;
+      enregistrerMetaApple(c.titre, c.auteur, { couverture: c.couverture, resume: '' });
+      afficherResultatLibre([{
+        id: c.id,
+        titre: c.titre,
+        auteur: c.auteur,
+        libre: true,
+        couverture: c.couverture,
+      }], { couverture: c.couverture });
+      zoneLibre.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      lancerImportComplet(c.id, { couverture: c.couverture });
+    });
+  });
 
   // --- Gestion de la photo de couverture / page de garde ---
   async function traiterCouverture(fichier) {
@@ -127,7 +253,7 @@ function afficherFormulaire(racine) {
         form.querySelector('#langue-fr').checked = true;
       }
 
-      afficherResultatLibre(donnees.resultats || []);
+      afficherResultatLibre(donnees.resultats || [], donnees.metaApple || null);
     } catch (e) {
       couvStatut.innerHTML = `<span style="color:var(--danger)">${esc(e.message || 'Échec de l\'analyse')}</span>`;
     }
@@ -153,7 +279,7 @@ function afficherFormulaire(racine) {
       zoneLibre.innerHTML = '';
       return;
     }
-    zoneLibre.innerHTML = '<p class="aide" style="margin:10px 0;"><span class="roue petite" aria-hidden="true"></span> Recherche dans la bibliothèque libre…</p>';
+    zoneLibre.innerHTML = '<p class="aide" style="margin:10px 0;"><span class="roue petite" aria-hidden="true"></span> Recherche sur Apple Livres & bibliothèque libre…</p>';
     delaiRecherche = setTimeout(async () => {
       try {
         const token = etat.session?.access_token;
@@ -174,8 +300,8 @@ function afficherFormulaire(racine) {
           zoneLibre.innerHTML = '';
           return;
         }
-        const { resultats } = await r.json();
-        afficherResultatLibre(resultats || []);
+        const { resultats, metaApple } = await r.json();
+        afficherResultatLibre(resultats || [], metaApple || null);
       } catch {
         zoneLibre.innerHTML = '';
       }
@@ -186,13 +312,33 @@ function afficherFormulaire(racine) {
   form.auteur.addEventListener('input', planifierRecherche);
   form.querySelectorAll('input[name="langue"]').forEach((i) => i.addEventListener('change', planifierRecherche));
 
-  // --- Affichage du résultat et proposition d'import ---
-  function afficherResultatLibre(resultats) {
+  // --- Affichage du résultat (Couverture Apple + Statut Domaine Public) ---
+  function afficherResultatLibre(resultats, metaApple = null) {
+    const titreSaisi = form.titre.value.trim();
+    const auteurSaisi = form.auteur.value.trim();
+    if (metaApple && titreSaisi) {
+      enregistrerMetaApple(titreSaisi, auteurSaisi, metaApple);
+    }
+
+    const couvUrl = resultats?.[0]?.couverture || metaApple?.couverture || '';
+    const resumeTexte = resultats?.[0]?.resume || metaApple?.resume || '';
+    const blocApercuApple = couvUrl
+      ? `<div class="apercu-apple">
+           <img class="apercu-apple-img" src="${esc(couvUrl)}" alt="" onerror="this.remove()">
+           <div class="apercu-apple-corps">
+             <strong style="font-size:.96rem;color:var(--texte);display:block">${esc(metaApple?.titreOfficiel || resultats?.[0]?.titre || titreSaisi)}</strong>
+             <span style="font-size:.84rem;color:var(--texte-2)">${esc(metaApple?.auteurOfficiel || resultats?.[0]?.auteur || auteurSaisi)}</span>
+             ${resumeTexte ? `<p class="apercu-apple-resume">${esc(resumeTexte)}</p>` : ''}
+           </div>
+         </div>`
+      : '';
+
     if (!resultats || !resultats.length) {
       zoneLibre.innerHTML = `
         <div class="carte-libre-refuse">
-          <p style="margin:0 0 4px;font-weight:600;color:var(--texte);">🔒 Livre absent de la bibliothèque libre ou sous droits d'auteur</p>
-          <p style="margin:0;">Seuls les ouvrages du domaine public peuvent être importés en 1 clic. Tu pourras numériser tes propres pages papier avec l'appareil photo à l'étape suivante.</p>
+          ${blocApercuApple}
+          <p style="margin:0 0 4px;font-weight:600;color:var(--texte);">🔒 Livre sous droits d'auteur (non gratuit)</p>
+          <p style="margin:0;">${couvUrl ? "La couverture officielle Apple Livres a bien été récupérée !" : "Seuls les ouvrages du domaine public peuvent être importés en 1 clic."} Clique sur <strong>Continuer</strong> ci-dessous pour numériser tes propres pages papier avec l'appareil photo.</p>
         </div>`;
       return;
     }
@@ -202,11 +348,13 @@ function afficherFormulaire(racine) {
     if (libre.libre) {
       zoneLibre.innerHTML = `
         <div class="carte-libre-trouve">
-          <span class="badge-domaine-public">✨ Version complète disponible</span>
-          <h3 style="font-size:1.1rem;margin:4px 0 2px;">${esc(libre.titre)}</h3>
-          <p style="margin:0 0 8px;color:var(--texte-2);font-size:.88rem;">${esc(libre.auteur)}${libre.annees ? ' (' + esc(libre.annees) + ')' : ''}</p>
+          <span class="badge-domaine-public">✨ Gratuit sur Apple Livres & Domaine Public</span>
+          ${blocApercuApple || `
+            <h3 style="font-size:1.1rem;margin:4px 0 2px;">${esc(libre.titre)}</h3>
+            <p style="margin:0 0 8px;color:var(--texte-2);font-size:.88rem;">${esc(libre.auteur)}${libre.annees ? ' (' + esc(libre.annees) + ')' : ''}</p>
+          `}
           <p style="margin:0 0 12px;font-size:.9rem;">
-            Ce livre fait partie du <strong>domaine public</strong>. Tu peux importer immédiatement son texte intégral au lieu de photographier chaque page !
+            Ce classique fait partie du <strong>domaine public</strong> (auteur décédé il y a plus de 70 ans). Tu peux importer son texte intégral et sa couverture officielle en 1 clic !
           </p>
           <button type="button" class="btn btn-succes btn-bloc" id="btn-import-libre">
             📥 Importer tout le livre en 1 clic
@@ -214,19 +362,23 @@ function afficherFormulaire(racine) {
           <p class="aide" style="margin-top:8px;text-align:center;font-size:.8rem;">Ou continue ci-dessous pour numériser tes propres pages manuellement.</p>
         </div>`;
 
-      zoneLibre.querySelector('#btn-import-libre').addEventListener('click', () => lancerImportComplet(libre.id));
+      zoneLibre.querySelector('#btn-import-libre').addEventListener('click', () => lancerImportComplet(libre.id, {
+        couverture: libre.couverture || metaApple?.couverture,
+        resume: libre.resume || metaApple?.resume,
+      }));
     } else {
       zoneLibre.innerHTML = `
         <div class="carte-libre-refuse">
+          ${blocApercuApple}
           <p style="margin:0 0 4px;font-weight:600;color:var(--texte);">🔒 Livre protégé par les droits d'auteur</p>
           <p style="margin:0 0 6px;">${esc(libre.raison || "Ce livre est encore sous droits d'auteur.")}</p>
-          <p style="margin:0;font-size:.82rem;">Ebook respecte la législation : seuls les livres libres sont téléchargeables. Continue ci-dessous pour créer le livre et numériser tes pages personnelles avec l'appareil photo.</p>
+          <p style="margin:0;font-size:.82rem;">La couverture officielle Apple Livres est prête : clique sur <strong>Continuer</strong> ci-dessous pour photographier tes pages personnelles.</p>
         </div>`;
     }
   }
 
   // --- Import intégral en 1 clic ---
-  async function lancerImportComplet(idGutenberg) {
+  async function lancerImportComplet(idGutenberg, meta = null) {
     const bouton = zoneLibre.querySelector('#btn-import-libre');
     if (bouton) {
       bouton.disabled = true;
@@ -256,12 +408,18 @@ function afficherFormulaire(racine) {
       const { titre, pages } = await r.json();
       if (bouton) bouton.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
 
+      const titreFinal = form.titre.value.trim() || titre;
+      const auteurFinal = form.auteur.value.trim();
+      if (meta?.couverture) {
+        enregistrerMetaApple(titreFinal, auteurFinal, meta);
+      }
+
       // 1. Créer le livre dans Supabase
       const { data: livreCree, error: errLivre } = await etat.supabase
         .from('books')
         .insert({
-          titre: form.titre.value.trim() || titre,
-          auteur: form.auteur.value.trim(),
+          titre: titreFinal,
+          auteur: auteurFinal,
           type: form.type.value,
           langue: form.langue.value,
           user_id: etat.user.id,

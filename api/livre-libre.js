@@ -42,6 +42,7 @@ export default async function handler(req, res) {
     if (corps.action === 'chercher') return res.status(200).json(await chercher(corps));
     if (corps.action === 'importer') return res.status(200).json(await importer(corps));
     if (corps.action === 'analyser-couverture') return res.status(200).json(await analyserCouverture(corps));
+    if (corps.action === 'meta-apple') return res.status(200).json(await chercherMetaApple(corps));
     return res.status(400).json({ erreur: 'Action inconnue.' });
   } catch (e) {
     const statut = e.statut || 502;
@@ -134,16 +135,63 @@ function decoder(t) {
 }
 
 // -----------------------------------------------------------------------------
-// Recherche
+// Métadonnées & Couvertures officielles Apple Livres (iTunes Search API)
+// -----------------------------------------------------------------------------
+async function chercherMetaApple({ titre = '', auteur = '', langue = 'fr' }) {
+  const t = String(titre).trim().slice(0, 150);
+  const a = String(auteur).trim().slice(0, 100);
+  if (!t) return null;
+
+  const pays = langue === 'en' ? 'us' : 'fr';
+  const terme = `${t} ${a}`.trim();
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(terme)}&entity=ebook&country=${pays}&limit=5`;
+
+  try {
+    const texte = await recuperer(url, 6000);
+    const json = JSON.parse(texte);
+    const items = Array.isArray(json.results) ? json.results : [];
+    if (!items.length) return null;
+
+    // Privilégier l'édition gratuite (souvent l'édition classique officielle sur Apple Livres) ou le premier résultat pertinent
+    const meilleur = items.find((x) => x.price === 0 && x.artworkUrl100) || items.find((x) => x.artworkUrl100) || items[0];
+    const couverture = (meilleur.artworkUrl100 || meilleur.artworkUrl60 || '')
+      .replace(/\d+x\d+bb/, '600x600bb');
+
+    const resumeBrut = String(meilleur.description || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .trim();
+
+    return {
+      titreOfficiel: decoder(meilleur.trackName || t),
+      auteurOfficiel: decoder(meilleur.artistName || a),
+      couverture: couverture || null,
+      resume: decoder(resumeBrut).slice(0, 600),
+      gratuitApple: meilleur.price === 0,
+      genre: Array.isArray(meilleur.genres) ? meilleur.genres[0] : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Recherche combinée : Texte intégral Gutenberg + Couverture officielle Apple
 // -----------------------------------------------------------------------------
 async function chercher({ titre = '', auteur = '', langue = 'fr' }) {
   const t = String(titre).trim().slice(0, 150);
   const a = String(auteur).trim().slice(0, 100);
   if (!t) throw erreur(400, 'Titre manquant.');
 
-  // On cherche « titre + auteur », puis le titre seul si rien n'est trouvé
-  let ids = await idsGutenberg(`${t} ${a}`.trim());
-  if (!ids.length && a) ids = await idsGutenberg(t);
+  // On lance en parallèle la recherche Gutenberg et la recherche de couverture Apple Livres
+  const [idsInitiaux, metaApple] = await Promise.all([
+    idsGutenberg(`${t} ${a}`.trim()).catch(() => []),
+    chercherMetaApple({ titre: t, auteur: a, langue }),
+  ]);
+
+  let ids = idsInitiaux;
+  if (!ids.length && a) ids = await idsGutenberg(t).catch(() => []);
 
   // Fiches lues en parallèle (5 maximum pour rester rapide)
   const fiches = (await Promise.allSettled(ids.slice(0, 5).map(lireFiche)))
@@ -152,6 +200,7 @@ async function chercher({ titre = '', auteur = '', langue = 'fr' }) {
     .filter((f) => !langue || f.langue === langue);
 
   return {
+    metaApple,
     resultats: fiches.map((f) => ({
       id: f.id,
       titre: f.titre,
@@ -159,6 +208,8 @@ async function chercher({ titre = '', auteur = '', langue = 'fr' }) {
       annees: f.auteurs.map((x) => (x.naissance || x.deces ? `${x.naissance ?? '?'}–${x.deces ?? '?'}` : '')).filter(Boolean).join(', '),
       libre: f.libre,
       raison: f.raison,
+      couverture: metaApple?.couverture || `${GUTENBERG}/cache/epub/${f.id}/pg${f.id}.cover.medium.jpg`,
+      resume: metaApple?.resume || '',
     })),
   };
 }
@@ -325,16 +376,18 @@ If the image is not a book cover/title page or the title is impossible to determ
   const langue = infos.langue === 'en' ? 'en' : 'fr';
   const type = infos.type === 'theatre' ? 'theatre' : 'roman';
 
-  // Recherche automatique des versions libres si titre identifié
+  // Recherche automatique des versions libres et de la couverture officielle Apple
   let resultats = [];
+  let metaApple = null;
   if (titre) {
     try {
       const res = await chercher({ titre, auteur, langue });
       resultats = res.resultats || [];
+      metaApple = res.metaApple || null;
     } catch {
       resultats = [];
     }
   }
 
-  return { titre, auteur, langue, type, resultats };
+  return { titre, auteur, langue, type, resultats, metaApple };
 }

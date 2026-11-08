@@ -1,7 +1,7 @@
 // Vue « Bibliothèque » : grille des livres avec couverture CSS et progression.
 
 import { etat, pseudoActuel } from '../etat.js';
-import { esc, icones, couvertureHTML, erreurHTML, messageErreur } from '../ui.js';
+import { esc, icones, couvertureHTML, hydraterCouvertures, erreurHTML, messageErreur } from '../ui.js';
 import { lireCache, ecrireCache } from '../cache.js';
 
 export async function afficher(racine) {
@@ -81,6 +81,7 @@ function rendre(racine, livres) {
     </div>
     <ul class="grille-livres">${cartes}</ul>
     ${fab}`;
+  hydraterCouvertures(racine);
 }
 
 function squeletteHTML() {
