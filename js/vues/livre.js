@@ -6,6 +6,7 @@ import { etat } from '../etat.js';
 import { esc, icones, couvertureHTML, hydraterCouvertures, lireMetaApple, erreurHTML, messageErreur, toast, confirmer, libelleType, libelleLangue, formatDate, ouvrirFeuille } from '../ui.js';
 import { monterAvis } from '../avis.js';
 import { supprimerCache } from '../cache.js';
+import { lireCitationsLivre, ouvrirCarnetCitations } from '../citations.js';
 
 export async function afficher(racine, { params }) {
   const idLivre = params[0];
@@ -59,6 +60,7 @@ export async function afficher(racine, { params }) {
             : `<a class="btn btn-primaire" href="#/ajouter/${livre.id}">${icones.photo} Ajouter la 1ère page</a>`
           }
           <a class="btn btn-secondaire" href="#/ajouter/${livre.id}">${icones.plus} Ajouter des pages</a>
+          <button type="button" class="btn btn-secondaire" data-action="citations">${icones.signet} Citations & notes (${lireCitationsLivre(livre.id).length})</button>
           <button type="button" class="btn btn-secondaire" data-action="modifier">${icones.crayon} Modifier</button>
           <button type="button" class="btn btn-discret" style="color:var(--danger)" data-action="supprimer">${icones.corbeille} Supprimer</button>
         </div>
@@ -82,6 +84,21 @@ export async function afficher(racine, { params }) {
   // Monter les avis
   const zoneAvis = racine.querySelector('.zone-avis-fiche');
   monterAvis(zoneAvis, livre);
+
+  // Carnet de citations et notes
+  const btnCit = racine.querySelector('[data-action="citations"]');
+  btnCit.addEventListener('click', () => {
+    ouvrirCarnetCitations(livre, {
+      pageCourante: dernierePage,
+      allerAPage: async (numPage) => {
+        await etat.supabase.from('books').update({ derniere_page: numPage }).eq('id', livre.id);
+        location.hash = `#/lecteur/${livre.id}`;
+      },
+      surChangement: () => {
+        btnCit.innerHTML = `${icones.signet} Citations & notes (${lireCitationsLivre(livre.id).length})`;
+      },
+    });
+  });
 
   // Modification des infos du livre
   racine.querySelector('[data-action="modifier"]').addEventListener('click', () => {

@@ -592,6 +592,309 @@ body.mode-lecture .toasts { bottom: calc(90px + env(safe-area-inset-bottom)); }
   margin: 0;
   opacity: .85;
 }
+.badge-serie {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--etoile) 18%, transparent);
+  color: var(--etoile);
+}
+.badge-serie.inactif {
+  background: var(--fond-2);
+  color: var(--texte-2);
+  font-weight: 500;
+}
+.semainier {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.jour-semaine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.jour-rond {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: .72rem;
+  font-weight: 700;
+  background: var(--fond-2);
+  color: var(--texte-2);
+  border: 1.5px solid var(--bordure);
+  transition: transform var(--transition), background-color var(--transition);
+}
+.jour-lettre {
+  display: none;
+}
+.jour-semaine.partiel .jour-rond {
+  background: var(--accent-doux);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.jour-semaine.atteint .jour-rond {
+  background: var(--succes);
+  color: #fff;
+  border-color: var(--succes);
+}
+.jour-semaine.aujourdhui .jour-rond {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+
+/* Barre de recherche et filtres de la bibliothèque */
+.bib-outils {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.bib-recherche {
+  position: relative;
+}
+.bib-recherche-icone {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--texte-2);
+  pointer-events: none;
+}
+.bib-recherche-icone svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.bib-recherche-saisie {
+  padding-left: 42px;
+  min-height: 44px;
+  border-radius: 999px;
+}
+.bib-filtres {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.bib-filtres::-webkit-scrollbar { display: none; }
+.pastille-filtre {
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1.5px solid var(--bordure);
+  background: var(--surface);
+  color: var(--texte-2);
+  font-size: .86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition), border-color var(--transition);
+}
+.pastille-filtre:hover {
+  background: var(--fond-2);
+  color: var(--texte);
+}
+.pastille-filtre.actif {
+  background: var(--primaire);
+  color: var(--sur-primaire);
+  border-color: var(--primaire);
+}
+
+/* Mode Livre Audio */
+.btn-icone.actif {
+  background: var(--accent-doux);
+  color: var(--accent);
+}
+.barre-audio {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 18px;
+  background: var(--accent-doux);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  font-size: .88rem;
+  font-family: var(--police-ui);
+}
+.barre-audio-statut {
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.barre-audio-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.btn-vitesse-audio {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: .82rem;
+}
+.btn-stop-audio {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: .82rem;
+}
+.btn-stop-audio svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.paragraphe-audio-actif {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+  margin-left: -13px;
+  border-radius: 6px;
+  transition: background-color 200ms ease;
+}
+
+/* Surlignages, citations et recherche dans le livre */
+.barre-surlignage {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  box-shadow: var(--ombre-2);
+  animation: apparition 180ms ease both;
+}
+.pastille-surligne {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, .15);
+  cursor: pointer;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.pastille-surligne.jaune { background: #FFE066; }
+.pastille-surligne.rose  { background: #FFADCE; }
+.pastille-surligne.bleu  { background: #94D2FF; }
+.btn-surligne-note {
+  background: var(--fond-2);
+  border: 1px solid var(--bordure);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--texte);
+}
+mark.surligne {
+  padding: 1px 3px;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+mark.surligne-jaune { background: rgba(255, 224, 102, .48); }
+mark.surligne-rose  { background: rgba(255, 150, 195, .42); }
+mark.surligne-bleu  { background: rgba(130, 200, 255, .42); }
+mark.surligne-recherche {
+  background: rgba(255, 190, 40, .65);
+  color: inherit;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.citation-apercu {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-family: var(--police-livre);
+  font-style: italic;
+  background: var(--fond-2);
+  border-left: 4px solid #FFE066;
+}
+.liste-citations, .liste-recherche-livre {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.carte-citation {
+  background: var(--fond-2);
+  border: 1px solid var(--bordure);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.surligne-bord-jaune { border-left-color: #EAB308; }
+.surligne-bord-rose  { border-left-color: #EC4899; }
+.surligne-bord-bleu  { border-left-color: #3B82F6; }
+.carte-citation-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.badge-page-cit {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 700;
+  background: var(--accent-doux);
+  color: var(--accent);
+}
+.carte-citation-texte {
+  margin: 0;
+  font-family: var(--police-livre);
+  font-style: italic;
+  font-size: .95rem;
+  line-height: 1.5;
+}
+.carte-citation-note {
+  margin: 6px 0 0;
+  font-size: .85rem;
+  color: var(--texte-2);
+}
+.resultat-recherche-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--bordure);
+  background: var(--fond-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition);
+}
+.resultat-recherche-item:hover {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.extrait-recherche {
+  font-family: var(--police-livre);
+  font-size: .92rem;
+  line-height: 1.45;
+  color: var(--texte);
+}
 
 .grille-livres {
   list-style: none; margin: 0; padding: 0;

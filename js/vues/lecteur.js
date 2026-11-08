@@ -1,6 +1,7 @@
 // =============================================================================
 //  Lecteur, façon Apple Livres : une page à la fois, balayage, marque-page,
-//  réglages d'affichage, traduction (livres en anglais) et avis.
+//  réglages d'affichage, mode livre audio, surlignages/citations, recherche
+//  dans le livre, traduction (livres en anglais) et avis.
 // =============================================================================
 
 import { etat } from '../etat.js';
@@ -8,10 +9,12 @@ import { esc, icones, toast, erreurHTML, messageErreur, ouvrirFeuille } from '..
 import { lireCache, ecrireCache, supprimerCache } from '../cache.js';
 import { themeActuel } from '../theme.js';
 import { enregistrerPageLue, enregistrerTempsLecture, calculerProgression, ouvrirReglageObjectif } from '../objectif.js';
+import { lireCitationsLivre, ajouterCitation, decorerTexteHTML, ouvrirEditionCitation, ouvrirCarnetCitations } from '../citations.js';
 
 const CLE_REGLAGES = 'ebook-lecteur';
 const TAILLES = [16, 17, 18, 20, 22, 24, 27, 30, 34];
 const INTERLIGNES = { serre: 1.45, normal: 1.65, aere: 1.9 };
+const VITESSES_AUDIO = [0.9, 1, 1.2, 1.5];
 
 function lireReglages() {
   let r = {};
@@ -20,6 +23,7 @@ function lireReglages() {
     taille: TAILLES.includes(r.taille) ? r.taille : 20,
     interligne: INTERLIGNES[r.interligne] ? r.interligne : 'normal',
     theme: ['clair', 'sepia', 'sombre'].includes(r.theme) ? r.theme : (themeActuel() === 'sombre' ? 'sombre' : 'clair'),
+    vitesseAudio: VITESSES_AUDIO.includes(r.vitesseAudio) ? r.vitesseAudio : 1,
   };
 }
 function sauverReglages(r) {
@@ -72,12 +76,12 @@ function motsCliquables(texte) {
     .join('');
 }
 
-function blocsHTML(blocs, { mots = false, type } = {}) {
+function blocsHTML(blocs, { mots = false, type, citationsPage = [], termeRecherche = '' } = {}) {
   if (!blocs.some((b) => b.trim())) return '<p class="page-vide">Cette page est vide.</p>';
-  return blocs.map((b) => {
-    const contenu = mots ? motsCliquables(b) : esc(b);
-    const classe = type !== 'theatre' && /^[—–]/.test(b) ? ' class="dialogue-ligne"' : '';
-    return `<p${classe}>${contenu || '&nbsp;'}</p>`;
+  return blocs.map((b, idx) => {
+    const base = mots ? motsCliquables(b) : decorerTexteHTML(esc(b), citationsPage, termeRecherche);
+    const estDialogue = type !== 'theatre' && /^[—–]/.test(b);
+    return `<p data-bloc-idx="${idx}"${estDialogue ? ' class="dialogue-ligne"' : ''}>${base || '&nbsp;'}</p>`;
   }).join('');
 }
 
@@ -122,9 +126,16 @@ export async function afficher(racine, { params }) {
   let index = Math.min(Math.max((livre.derniere_page || 1) - 1, 0), Math.max(total - 1, 0));
   const traductions = new Map(); // index de page -> blocs traduits
   let voirTraduction = false;
+  let termeRechercheActif = '';
   let minuterieMarque = null;
   let feuilleOuverte = null;
   let bulle = null;
+  let barreSurlignage = null;
+
+  // État du mode Livre Audio
+  let audioActif = false;
+  let audioBlocIdx = 0;
+  let jetonAudio = 0;
 
   // 2. Squelette du lecteur
   racine.innerHTML = `
@@ -132,9 +143,23 @@ export async function afficher(racine, { params }) {
       <header class="lecteur-barre">
         <a href="#/bibliotheque" class="btn-icone" aria-label="Retour à la bibliothèque">${icones.retour}</a>
         <div class="lecteur-titre"><strong>${esc(livre.titre)}</strong><span>${esc(livre.auteur || '')}</span></div>
+        ${total ? `
+          <button type="button" class="btn-icone" data-action="rechercher" aria-label="Rechercher dans le livre" title="Rechercher un mot">${icones.recherche}</button>
+          <button type="button" class="btn-icone" data-action="audio" aria-label="Écouter la page à voix haute" title="Mode Livre Audio">${icones.audio}</button>
+          <button type="button" class="btn-icone" data-action="citations" aria-label="Mes citations et surlignages" title="Citations & notes">${icones.signet}</button>
+        ` : ''}
         <button type="button" class="btn-icone btn-aa" data-action="reglages" aria-label="Réglages d'affichage">Aa</button>
         <button type="button" class="btn-icone" data-action="menu" aria-label="Plus d'options">${icones.plusOptions}</button>
       </header>
+
+      <div class="barre-audio" id="barre-audio" style="display:none" role="region" aria-label="Contrôles du livre audio">
+        <span class="barre-audio-statut" id="audio-statut">🔊 Lecture audio…</span>
+        <div class="barre-audio-actions">
+          <button type="button" class="btn btn-secondaire btn-vitesse-audio" id="btn-vitesse-audio" title="Vitesse de lecture">${reglages.vitesseAudio}×</button>
+          <button type="button" class="btn btn-danger btn-stop-audio" id="btn-stop-audio" aria-label="Arrêter la lecture audio">${icones.stopAudio} Arrêter</button>
+        </div>
+      </div>
+
       <div class="lecteur-zone">
         <article class="lecteur-page ${livre.type === 'theatre' ? 'theatre' : ''}" lang="${livre.langue}" tabindex="-1" aria-live="polite"></article>
         <div class="lecteur-fin"></div>
@@ -159,6 +184,10 @@ export async function afficher(racine, { params }) {
   const btnPrec = racine.querySelector('[data-action="precedente"]');
   const btnSuiv = racine.querySelector('[data-action="suivante"]');
   const btnTrad = racine.querySelector('[data-action="traduire"]');
+  const btnAudioHaut = racine.querySelector('[data-action="audio"]');
+  const barreAudioEl = racine.querySelector('#barre-audio');
+  const audioStatutEl = racine.querySelector('#audio-statut');
+  const btnVitesseAudio = racine.querySelector('#btn-vitesse-audio');
 
   function appliquerReglages() {
     lecteur.classList.remove('theme-clair', 'theme-sepia', 'theme-sombre');
@@ -170,6 +199,7 @@ export async function afficher(racine, { params }) {
   // 3. Affichage d'une page
   function rendre(direction = 0) {
     fermerBulle();
+    fermerBarreSurlignage();
     if (!total) {
       article.innerHTML = `<div class="etat-vide" style="font-family:var(--police-ui)">
           <h2>Aucune page pour l'instant</h2>
@@ -181,13 +211,19 @@ export async function afficher(racine, { params }) {
     }
 
     const page = pages[index];
+    const citationsPage = lireCitationsLivre(livre.id, index + 1);
     const traduite = voirTraduction && traductions.has(index);
     if (traduite) {
       article.innerHTML = `<div class="mention-traduction"><span>Traduction automatique (MyMemory)</span></div>
-        ${blocsHTML(traductions.get(index), { type: livre.type })}`;
+        ${blocsHTML(traductions.get(index), { type: livre.type, citationsPage, termeRecherche: termeRechercheActif })}`;
       article.lang = 'fr';
     } else {
-      article.innerHTML = blocsHTML(blocsDuTexte(page.texte, livre.type), { mots: estAnglais, type: livre.type });
+      article.innerHTML = blocsHTML(blocsDuTexte(page.texte, livre.type), {
+        mots: estAnglais,
+        type: livre.type,
+        citationsPage,
+        termeRecherche: termeRechercheActif,
+      });
       article.lang = livre.langue;
     }
 
@@ -217,9 +253,10 @@ export async function afficher(racine, { params }) {
     fin.querySelector('[data-action="avis"]')?.addEventListener('click', ouvrirAvis);
   }
 
-  function allerA(nouvel, direction) {
+  function allerA(nouvel, direction, { garderAudio = false } = {}) {
     if (nouvel < 0 || nouvel >= total || nouvel === index) return;
     if (direction > 0) enregistrerPageLue(livre.id, index + 1);
+    if (!garderAudio && audioActif) arreterAudio();
     index = nouvel;
     window.scrollTo({ top: 0, behavior: 'instant' });
     rendre(direction);
@@ -256,7 +293,258 @@ export async function afficher(racine, { params }) {
   }
   const intervalleTemps = setInterval(comptabiliserTranche, 15000);
 
-  // 4. Marque-page automatique (enregistré 0,8 s après le changement de page)
+  // ---------------------------------------------------------------------------
+  // 4. Mode Livre Audio (Synthèse vocale paragraphe par paragraphe)
+  // ---------------------------------------------------------------------------
+  function choisirVoix(codeLangue) {
+    if (!('speechSynthesis' in window)) return null;
+    const voix = window.speechSynthesis.getVoices() || [];
+    const prefixe = codeLangue === 'en' ? 'en' : 'fr';
+    return voix.find((v) => v.lang.toLowerCase().startsWith(prefixe) && /natural|premium|google|microsoft|thomas|amelie|audrey|daniel/i.test(v.name))
+      || voix.find((v) => v.lang.toLowerCase().startsWith(prefixe))
+      || null;
+  }
+
+  function arreterAudio() {
+    jetonAudio++;
+    audioActif = false;
+    if ('speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch { /* ignoré */ }
+    }
+    if (barreAudioEl) barreAudioEl.style.display = 'none';
+    btnAudioHaut?.classList.remove('actif');
+    article.querySelectorAll('.paragraphe-audio-actif').forEach((el) => el.classList.remove('paragraphe-audio-actif'));
+  }
+
+  function demarrerAudio(depuisBloc = 0) {
+    if (!('speechSynthesis' in window)) {
+      toast('La synthèse vocale n\'est pas disponible sur ce navigateur.', 'erreur');
+      return;
+    }
+    if (!total) return;
+
+    const monJeton = ++jetonAudio;
+    audioActif = true;
+    audioBlocIdx = depuisBloc;
+    if (barreAudioEl) barreAudioEl.style.display = 'flex';
+    btnAudioHaut?.classList.add('actif');
+
+    const page = pages[index];
+    const traduite = voirTraduction && traductions.has(index);
+    const blocs = (traduite ? traductions.get(index) : blocsDuTexte(page.texte, livre.type))
+      .map((b, idx) => ({ texte: String(b || '').trim(), idx }))
+      .filter((b) => b.texte.length > 0);
+
+    if (!blocs.length) {
+      arreterAudio();
+      return;
+    }
+
+    function lireProchain(pos) {
+      if (monJeton !== jetonAudio || !audioActif) return;
+      if (pos >= blocs.length) {
+        // Fin de la page : passage automatique à la page suivante s'il en reste une
+        if (index < total - 1) {
+          allerA(index + 1, 1, { garderAudio: true });
+          setTimeout(() => {
+            if (monJeton === jetonAudio && audioActif) demarrerAudio(0);
+          }, 350);
+        } else {
+          toast('Fin de la lecture audio du livre.');
+          arreterAudio();
+        }
+        return;
+      }
+
+      const courant = blocs[pos];
+      audioBlocIdx = pos;
+      if (audioStatutEl) {
+        audioStatutEl.textContent = `🔊 Page ${index + 1} · Paragraphe ${pos + 1}/${blocs.length}`;
+      }
+
+      article.querySelectorAll('.paragraphe-audio-actif').forEach((el) => el.classList.remove('paragraphe-audio-actif'));
+      const pEl = article.querySelector(`[data-bloc-idx="${courant.idx}"]`);
+      if (pEl) {
+        pEl.classList.add('paragraphe-audio-actif');
+        pEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      try { window.speechSynthesis.cancel(); } catch { /* ignoré */ }
+      const u = new SpeechSynthesisUtterance(courant.texte);
+      const codeLang = traduite ? 'fr' : livre.langue;
+      u.lang = codeLang === 'en' ? 'en-US' : 'fr-FR';
+      const v = choisirVoix(codeLang);
+      if (v) u.voice = v;
+      u.rate = reglages.vitesseAudio || 1;
+
+      u.onend = () => {
+        if (monJeton === jetonAudio && audioActif) lireProchain(pos + 1);
+      };
+      u.onerror = () => {
+        if (monJeton === jetonAudio && audioActif) arreterAudio();
+      };
+
+      window.speechSynthesis.speak(u);
+    }
+
+    lireProchain(depuisBloc);
+  }
+
+  function basculerAudio() {
+    if (audioActif) arreterAudio();
+    else demarrerAudio(0);
+  }
+
+  btnVitesseAudio?.addEventListener('click', () => {
+    const i = (VITESSES_AUDIO.indexOf(reglages.vitesseAudio) + 1) % VITESSES_AUDIO.length;
+    reglages.vitesseAudio = VITESSES_AUDIO[i];
+    btnVitesseAudio.textContent = `${reglages.vitesseAudio}×`;
+    sauverReglages(reglages);
+    if (audioActif) demarrerAudio(audioBlocIdx);
+  });
+
+  racine.querySelector('#btn-stop-audio')?.addEventListener('click', arreterAudio);
+
+  // ---------------------------------------------------------------------------
+  // 5. Surlignage rapide à la sélection de texte
+  // ---------------------------------------------------------------------------
+  function fermerBarreSurlignage() {
+    if (!barreSurlignage) return;
+    barreSurlignage.remove();
+    barreSurlignage = null;
+  }
+
+  function verifierSelectionTexte() {
+    const sel = window.getSelection?.();
+    const texte = String(sel || '').replace(/\s+/g, ' ').trim();
+    if (!texte || texte.length < 3 || !sel.rangeCount) {
+      fermerBarreSurlignage();
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!article.contains(range.commonAncestorContainer)) {
+      fermerBarreSurlignage();
+      return;
+    }
+
+    fermerBarreSurlignage();
+    barreSurlignage = document.createElement('div');
+    barreSurlignage.className = 'barre-surlignage';
+    barreSurlignage.setAttribute('role', 'toolbar');
+    barreSurlignage.setAttribute('aria-label', 'Surligner le passage sélectionné');
+    barreSurlignage.innerHTML = `
+      <button type="button" class="pastille-surligne jaune" data-coul="jaune" aria-label="Surligner en jaune" title="Surligner en jaune"></button>
+      <button type="button" class="pastille-surligne rose" data-coul="rose" aria-label="Surligner en rose" title="Surligner en rose"></button>
+      <button type="button" class="pastille-surligne bleu" data-coul="bleu" aria-label="Surligner en bleu" title="Surligner en bleu"></button>
+      <button type="button" class="btn-surligne-note" data-action="note-selection">💬 + Note</button>`;
+    document.body.appendChild(barreSurlignage);
+
+    const rect = range.getBoundingClientRect();
+    const bRect = barreSurlignage.getBoundingClientRect();
+    const gauche = Math.min(Math.max(12, rect.left + rect.width / 2 - bRect.width / 2), window.innerWidth - bRect.width - 12);
+    const haut = rect.top - bRect.height - 10 > 12 ? rect.top - bRect.height - 10 : rect.bottom + 10;
+    barreSurlignage.style.left = `${gauche}px`;
+    barreSurlignage.style.top = `${Math.max(12, haut)}px`;
+
+    barreSurlignage.querySelectorAll('[data-coul]').forEach((btn) => {
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', () => {
+        const couleur = btn.getAttribute('data-coul');
+        ajouterCitation({ bookId: livre.id, page: index + 1, texte, couleur });
+        sel.removeAllRanges();
+        fermerBarreSurlignage();
+        rendre();
+        toast('Passage surligné et ajouté à tes citations !');
+      });
+    });
+
+    const btnNote = barreSurlignage.querySelector('[data-action="note-selection"]');
+    btnNote.addEventListener('mousedown', (e) => e.preventDefault());
+    btnNote.addEventListener('click', () => {
+      const cit = ajouterCitation({ bookId: livre.id, page: index + 1, texte, couleur: 'jaune' });
+      sel.removeAllRanges();
+      fermerBarreSurlignage();
+      rendre();
+      if (cit) ouvrirEditionCitation(cit, () => rendre());
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. Recherche d'un mot ou d'un personnage dans tout le livre
+  // ---------------------------------------------------------------------------
+  function ouvrirRechercheLivre() {
+    const f = ouvrir({
+      titre: `Rechercher dans « ${livre.titre} »`,
+      contenu: `
+        <div class="champ" style="margin-bottom:12px">
+          <input type="search" class="saisie" id="champ-recherche-livre" value="${esc(termeRechercheActif)}" placeholder="Tape un mot, un nom ou une expression…" autocomplete="off">
+        </div>
+        <div id="resultats-recherche-livre" aria-live="polite"></div>`,
+    });
+
+    const champ = f.el.querySelector('#champ-recherche-livre');
+    const zoneRes = f.el.querySelector('#resultats-recherche-livre');
+
+    function chercherDansPages() {
+      const q = champ.value.trim();
+      termeRechercheActif = q;
+      rendre();
+
+      if (q.length < 2) {
+        zoneRes.innerHTML = '<p class="aide" style="color:var(--texte-2)">Tape au moins 2 lettres pour chercher dans toutes les pages du livre.</p>';
+        return;
+      }
+
+      const qMin = q.toLowerCase();
+      const correspondances = [];
+      for (let i = 0; i < pages.length; i++) {
+        const t = String(pages[i].texte || '');
+        const pos = t.toLowerCase().indexOf(qMin);
+        if (pos >= 0) {
+          const debut = Math.max(0, pos - 55);
+          const finExtrait = Math.min(t.length, pos + q.length + 75);
+          const extrait = (debut > 0 ? '…' : '') + t.slice(debut, finExtrait).replace(/\s+/g, ' ').trim() + (finExtrait < t.length ? '…' : '');
+          correspondances.push({ page: i + 1, extrait });
+        }
+      }
+
+      if (!correspondances.length) {
+        zoneRes.innerHTML = `<p class="aide" style="color:var(--texte-2)">Aucune occurrence trouvée pour « ${esc(q)} » sur les ${total} pages.</p>`;
+        return;
+      }
+
+      zoneRes.innerHTML = `
+        <p class="aide" style="margin-bottom:10px;color:var(--texte-2)">
+          <strong>${correspondances.length}</strong> page${correspondances.length > 1 ? 's' : ''} trouvée${correspondances.length > 1 ? 's' : ''}
+        </p>
+        <ul class="liste-recherche-livre">
+          ${correspondances.slice(0, 50).map((m) => `
+            <li>
+              <button type="button" class="resultat-recherche-item" data-saut-page="${m.page}">
+                <span class="badge-page-cit">Page ${m.page}</span>
+                <span class="extrait-recherche">${decorerTexteHTML(esc(m.extrait), [], q)}</span>
+              </button>
+            </li>
+          `).join('')}
+        </ul>`;
+
+      zoneRes.querySelectorAll('[data-saut-page]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const p = Number(btn.getAttribute('data-saut-page'));
+          f.fermer();
+          if (p - 1 !== index) allerA(p - 1, p - 1 > index ? 1 : -1);
+          else rendre();
+        });
+      });
+    }
+
+    champ.addEventListener('input', chercherDansPages);
+    chercherDansPages();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. Marque-page automatique (enregistré 0,8 s après le changement de page)
+  // ---------------------------------------------------------------------------
   function programmerMarquePage() {
     clearTimeout(minuterieMarque);
     minuterieMarque = setTimeout(enregistrerMarquePage, 800);
@@ -274,7 +562,7 @@ export async function afficher(racine, { params }) {
     supprimerCache(`bibliotheque:${etat.user.id}`);
   }
 
-  // 5. Traduction de la page entière
+  // 8. Traduction de la page entière
   async function basculerTraduction() {
     if (traductions.has(index)) {
       voirTraduction = !voirTraduction;
@@ -301,7 +589,7 @@ export async function afficher(racine, { params }) {
     }
   }
 
-  // 6. Traduction d'un mot au toucher
+  // 9. Traduction d'un mot au toucher
   function fermerBulle() {
     if (!bulle) return;
     bulle.remove();
@@ -344,10 +632,11 @@ export async function afficher(racine, { params }) {
     }
   }
 
-  // 7. Feuilles : réglages, menu, avis, aller à, modifier
+  // 10. Feuilles : réglages, menu, avis, aller à, modifier
   function ouvrir(options) {
     feuilleOuverte?.fermer();
     fermerBulle();
+    fermerBarreSurlignage();
     const f = ouvrirFeuille(options);
     const fermerOrigine = f.fermer;
     f.fermer = () => { fermerOrigine(); if (feuilleOuverte === f) feuilleOuverte = null; };
@@ -395,11 +684,28 @@ export async function afficher(racine, { params }) {
     }));
   }
 
+  function ouvrirCitations() {
+    feuilleOuverte?.fermer();
+    feuilleOuverte = ouvrirCarnetCitations(livre, {
+      pageCourante: index + 1,
+      allerAPage: (p) => {
+        if (p - 1 !== index) allerA(p - 1, p - 1 > index ? 1 : -1);
+      },
+      surChangement: () => rendre(),
+    });
+  }
+
   function ouvrirMenu() {
     const prog = calculerProgression();
+    const nbCit = lireCitationsLivre(livre.id).length;
     const f = ouvrir({
       titre: 'Options',
       contenu: `<ul class="liste-menu">
+        ${total ? `
+          <li><button type="button" data-m="audio">${icones.audio} ${audioActif ? 'Arrêter la lecture audio' : 'Écouter la page (Livre Audio)'}</button></li>
+          <li><button type="button" data-m="recherche">${icones.recherche} Rechercher un mot dans le livre</button></li>
+          <li><button type="button" data-m="citations">${icones.signet} Mes citations & notes (${nbCit})</button></li>
+        ` : ''}
         <li><button type="button" data-m="objectif">${icones.coche} Objectif du jour (${prog.pourcent} %)</button></li>
         <li><button type="button" data-m="avis">${icones.etoile.replace('fill="currentColor"', '')} Avis des lecteurs</button></li>
         ${total ? `<li><button type="button" data-m="aller">${icones.aller} Aller à la page…</button></li>
@@ -407,6 +713,18 @@ export async function afficher(racine, { params }) {
         <li><a href="#/ajouter/${livre.id}">${icones.photo} Ajouter des pages</a></li>
         <li><a href="#/livre/${livre.id}">${icones.livre} Fiche du livre</a></li>
       </ul>`,
+    });
+    f.el.querySelector('[data-m="audio"]')?.addEventListener('click', () => {
+      f.fermer();
+      basculerAudio();
+    });
+    f.el.querySelector('[data-m="recherche"]')?.addEventListener('click', () => {
+      f.fermer();
+      ouvrirRechercheLivre();
+    });
+    f.el.querySelector('[data-m="citations"]')?.addEventListener('click', () => {
+      f.fermer();
+      ouvrirCitations();
     });
     f.el.querySelector('[data-m="objectif"]').addEventListener('click', () => {
       f.fermer();
@@ -468,17 +786,30 @@ export async function afficher(racine, { params }) {
     });
   }
 
-  // 8. Écouteurs : boutons, balayage, clavier, mots
+  // 11. Écouteurs : boutons, balayage, clavier, mots, surlignages
   racine.querySelector('[data-action="reglages"]').addEventListener('click', ouvrirReglages);
   racine.querySelector('[data-action="menu"]').addEventListener('click', ouvrirMenu);
+  racine.querySelector('[data-action="rechercher"]')?.addEventListener('click', ouvrirRechercheLivre);
+  btnAudioHaut?.addEventListener('click', basculerAudio);
+  racine.querySelector('[data-action="citations"]')?.addEventListener('click', ouvrirCitations);
   btnPrec.addEventListener('click', precedente);
   btnSuiv.addEventListener('click', suivante);
   btnTrad?.addEventListener('click', basculerTraduction);
 
   article.addEventListener('click', (e) => {
+    const markCit = e.target.closest('mark[data-citation-id]');
+    if (markCit) {
+      const idCit = markCit.getAttribute('data-citation-id');
+      const cit = lireCitationsLivre(livre.id).find((x) => x.id === idCit);
+      if (cit) ouvrirEditionCitation(cit, () => rendre());
+      return;
+    }
     const mot = e.target.closest('.mot');
     if (mot && estAnglais) traduireMot(mot);
   });
+
+  article.addEventListener('mouseup', () => setTimeout(verifierSelectionTexte, 30));
+  article.addEventListener('keyup', () => setTimeout(verifierSelectionTexte, 30));
 
   // Balayage horizontal : gauche = page suivante, droite = page précédente
   let depart = null;
@@ -487,6 +818,7 @@ export async function afficher(racine, { params }) {
     depart = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
   }, { passive: true });
   zone.addEventListener('touchend', (e) => {
+    setTimeout(verifierSelectionTexte, 80);
     if (!depart) return;
     const dx = e.changedTouches[0].clientX - depart.x;
     const dy = e.changedTouches[0].clientY - depart.y;
@@ -502,12 +834,22 @@ export async function afficher(racine, { params }) {
     if (feuilleOuverte || e.target.closest?.('input, textarea')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); suivante(); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); precedente(); }
-    if (e.key === 'Escape') fermerBulle();
+    if (e.key === 'Escape') {
+      fermerBulle();
+      fermerBarreSurlignage();
+    }
   };
   const surClicDocument = (e) => {
     if (bulle && !bulle.contains(e.target) && !e.target.closest('.mot')) fermerBulle();
+    if (barreSurlignage && !barreSurlignage.contains(e.target)) {
+      const sel = String(window.getSelection?.() || '').trim();
+      if (!sel) fermerBarreSurlignage();
+    }
   };
-  const surDefilement = () => fermerBulle();
+  const surDefilement = () => {
+    fermerBulle();
+    fermerBarreSurlignage();
+  };
   const surCacher = () => {
     if (document.visibilityState === 'hidden') {
       comptabiliserTranche();
@@ -528,14 +870,16 @@ export async function afficher(racine, { params }) {
   // Synchronise le marque-page s'il avait été enregistré hors ligne
   if (enAttente) { livre.derniere_page = -1; programmerMarquePage(); }
 
-  // 9. Nettoyage quand on quitte le lecteur
+  // 12. Nettoyage quand on quitte le lecteur
   return () => {
+    arreterAudio();
     clearInterval(intervalleTemps);
     clearTimeout(minuteriePageLue);
     comptabiliserTranche();
     if (minuterieMarque) enregistrerMarquePage();
     feuilleOuverte?.fermer();
     fermerBulle();
+    fermerBarreSurlignage();
     document.removeEventListener('keydown', surTouche);
     document.removeEventListener('click', surClicDocument);
     window.removeEventListener('scroll', surDefilement);

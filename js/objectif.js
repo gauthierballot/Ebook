@@ -2,6 +2,7 @@
 //  Objectif de lecture personnel (strictement privé, propre à chaque utilisateur)
 //  - Choix entre un objectif en « pages » ou en « minutes » par jour
 //  - Rendu d'un diagramme circulaire SVG en pourcentage
+//  - Série de jours consécutifs (« Streak » 🔥) et semainier (L M M J V S D)
 //  - Synchronisé en local (localStorage) et dans les métadonnées privées Supabase Auth
 // =============================================================================
 
@@ -13,12 +14,15 @@ const DEFAUT = {
   cible: 10,      // 10 pages par défaut (ou 15 minutes)
 };
 
-function dateDuJour() {
-  const d = new Date();
+function formaterDateLocale(d = new Date()) {
   const annee = d.getFullYear();
   const mois = String(d.getMonth() + 1).padStart(2, '0');
   const jour = String(d.getDate()).padStart(2, '0');
   return `${annee}-${mois}-${jour}`;
+}
+
+function dateDuJour() {
+  return formaterDateLocale(new Date());
 }
 
 function cleStockage() {
@@ -26,8 +30,26 @@ function cleStockage() {
   return `ebook:objectif:v1:${uid}`;
 }
 
+/** Fusionne deux historiques journaliers (en gardant les valeurs maximales de chaque jour). */
+function fusionnerHistoriques(h1 = {}, h2 = {}) {
+  const fusion = {};
+  const cles = new Set([...Object.keys(h1 || {}), ...Object.keys(h2 || {})]);
+  // On conserve les 60 derniers jours pour garder un objet léger
+  const triees = [...cles].sort().slice(-60);
+  for (const date of triees) {
+    const a = h1?.[date] || {};
+    const b = h2?.[date] || {};
+    fusion[date] = {
+      pages: Math.max(a.pages || 0, b.pages || 0),
+      secondes: Math.max(a.secondes || 0, b.secondes || 0),
+      atteint: Boolean(a.atteint || b.atteint),
+    };
+  }
+  return fusion;
+}
+
 /**
- * Lit l'objectif et la progression du jour de l'utilisateur connecté.
+ * Lit l'objectif, la progression du jour et l'historique de l'utilisateur connecté.
  * Fusionne les données locales et les métadonnées privées du compte Supabase.
  */
 export function lireObjectif() {
@@ -57,6 +79,16 @@ export function lireObjectif() {
   ])].slice(-500);
   const feliciteAujourdhui = Boolean(localJour?.feliciteAujourdhui || distantJour?.feliciteAujourdhui);
 
+  const historique = fusionnerHistoriques(local?.historique, distant?.historique);
+  const valeurJour = unite === 'minutes' ? Math.floor(secondesAujourdhui / 60) : pagesAujourdhui;
+  if (pagesAujourdhui > 0 || secondesAujourdhui > 0) {
+    historique[aujourdhui] = {
+      pages: Math.max(historique[aujourdhui]?.pages || 0, pagesAujourdhui),
+      secondes: Math.max(historique[aujourdhui]?.secondes || 0, secondesAujourdhui),
+      atteint: Boolean(historique[aujourdhui]?.atteint || valeurJour >= cible),
+    };
+  }
+
   return {
     unite,
     cible,
@@ -65,6 +97,7 @@ export function lireObjectif() {
     secondesAujourdhui,
     clesPagesLues,
     feliciteAujourdhui,
+    historique,
     updatedAt: Math.max(local?.updatedAt || 0, distant?.updatedAt || 0),
   };
 }
@@ -73,50 +106,119 @@ let minuterieSync = null;
 
 /** Enregistre l'objectif en local immédiatement et synchronise en arrière-plan sur le compte privé Supabase. */
 export function sauverObjectif(donnees, { syncImmediat = false } = {}) {
-  const complet = {
-    ...lireObjectif(),
+  const base = lireObjectif();
+  const aujourdhui = dateDuJour();
+  const fusion = {
+    ...base,
     ...donnees,
-    dateJour: dateDuJour(),
+    dateJour: aujourdhui,
     updatedAt: Date.now(),
   };
 
+  const minutes = Math.floor((fusion.secondesAujourdhui || 0) / 60);
+  const valeur = fusion.unite === 'minutes' ? minutes : (fusion.pagesAujourdhui || 0);
+  const atteint = valeur >= Math.max(1, fusion.cible || 1);
+
+  const historique = { ...(fusion.historique || {}) };
+  if (fusion.pagesAujourdhui > 0 || fusion.secondesAujourdhui > 0 || historique[aujourdhui]) {
+    historique[aujourdhui] = {
+      pages: fusion.pagesAujourdhui || 0,
+      secondes: fusion.secondesAujourdhui || 0,
+      atteint,
+    };
+  }
+  fusion.historique = historique;
+
   try {
-    localStorage.setItem(cleStockage(), JSON.stringify(complet));
+    localStorage.setItem(cleStockage(), JSON.stringify(fusion));
   } catch { /* quota */ }
 
   if (etat.user && etat.supabase) {
-    // Mise à jour en mémoire pour cohérence immédiate
     etat.user.user_metadata = {
       ...(etat.user.user_metadata || {}),
-      objectif_lecture: complet,
+      objectif_lecture: fusion,
     };
 
     clearTimeout(minuterieSync);
     const synchroniser = async () => {
       try {
         const { data } = await etat.supabase.auth.updateUser({
-          data: { objectif_lecture: complet },
+          data: { objectif_lecture: fusion },
         });
         if (data?.user) etat.user = data.user;
       } catch { /* hors-ligne : sera resynchronisé plus tard */ }
     };
 
     if (syncImmediat) {
-      return synchroniser().then(() => complet);
+      return synchroniser().then(() => fusion);
     }
     minuterieSync = setTimeout(synchroniser, 2500);
   }
 
-  return Promise.resolve(complet);
+  return Promise.resolve(fusion);
 }
 
-/** Calcule les métriques d'affichage (valeur actuelle, cible, pourcentage 0-100). */
+/** Calcule la série de jours consécutifs de lecture (« Streak ») et les 7 jours de la semaine (L à D). */
+export function calculerSerieEtSemaine(obj = lireObjectif()) {
+  const hist = obj.historique || {};
+  const auj = new Date();
+  auj.setHours(12, 0, 0, 0);
+  const cleAuj = formaterDateLocale(auj);
+
+  const aLuLeJour = (cle) => {
+    const j = hist[cle];
+    return Boolean(j && (j.pages > 0 || j.secondes >= 60 || j.atteint));
+  };
+
+  // Série de jours consécutifs : on part d'aujourd'hui (si lu aujourd'hui) ou d'hier
+  let serie = 0;
+  const curseur = new Date(auj);
+  if (!aLuLeJour(cleAuj)) {
+    curseur.setDate(curseur.getDate() - 1);
+  }
+  while (serie < 365) {
+    const cle = formaterDateLocale(curseur);
+    if (aLuLeJour(cle)) {
+      serie++;
+      curseur.setDate(curseur.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  // Semainier du lundi au dimanche de la semaine en cours
+  const jourSemaine = (auj.getDay() + 6) % 7; // 0 = Lundi ... 6 = Dimanche
+  const lundi = new Date(auj);
+  lundi.setDate(auj.getDate() - jourSemaine);
+
+  const lettres = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  const noms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  const semaine = lettres.map((lettre, i) => {
+    const d = new Date(lundi);
+    d.setDate(lundi.getDate() + i);
+    const cle = formaterDateLocale(d);
+    const info = hist[cle];
+    const atteint = Boolean(info?.atteint);
+    const actif = aLuLeJour(cle);
+    return {
+      lettre,
+      nom: noms[i],
+      estAujourdhui: cle === cleAuj,
+      etat: atteint ? 'atteint' : (actif ? 'partiel' : 'vide'),
+    };
+  });
+
+  return { serie, semaine };
+}
+
+/** Calcule les métriques d'affichage (valeur actuelle, cible, pourcentage 0-100, série, semainier). */
 export function calculerProgression(obj = lireObjectif()) {
   const minutes = Math.floor((obj.secondesAujourdhui || 0) / 60);
   const valeur = obj.unite === 'minutes' ? minutes : (obj.pagesAujourdhui || 0);
   const cible = Math.max(1, obj.cible || 1);
   const pourcent = Math.min(100, Math.round((valeur / cible) * 100));
   const atteint = valeur >= cible;
+  const { serie, semaine } = calculerSerieEtSemaine(obj);
 
   return {
     unite: obj.unite,
@@ -126,6 +228,8 @@ export function calculerProgression(obj = lireObjectif()) {
     pages: obj.pagesAujourdhui || 0,
     pourcent,
     atteint,
+    serie,
+    semaine,
   };
 }
 
@@ -201,7 +305,7 @@ export function diagrammeCirculaireHTML(pourcent, { taille = 92, atteint = false
 }
 
 /**
- * Génère la carte complète de l'objectif de lecture (avec diagramme circulaire et bouton de réglage).
+ * Génère la carte complète de l'objectif de lecture (diagramme circulaire + série + semainier).
  */
 export function carteObjectifHTML() {
   const prog = calculerProgression();
@@ -215,23 +319,33 @@ export function carteObjectifHTML() {
       ? `Encore ${Math.max(0, prog.cible - prog.valeur)} min pour atteindre ton objectif.`
       : `Encore ${Math.max(0, prog.cible - prog.valeur)} page${prog.cible - prog.valeur > 1 ? 's' : ''} pour atteindre ton objectif.`);
 
-  const detailSecondaire = prog.unite === 'minutes' && prog.pages > 0
-    ? `${prog.pages} page${prog.pages > 1 ? 's' : ''} lue${prog.pages > 1 ? 's' : ''} aujourd'hui`
-    : (prog.unite === 'pages' && prog.minutes > 0 ? `${prog.minutes} min de lecture aujourd'hui` : '🔒 Objectif personnel (privé)');
+  const badgeSerie = prog.serie > 0
+    ? `<span class="badge-serie" title="Jours consécutifs de lecture">🔥 ${prog.serie} jour${prog.serie > 1 ? 's' : ''} de suite</span>`
+    : `<span class="badge-serie inactif">🔥 Série : 0 jour</span>`;
+
+  const semainierHTML = prog.semaine.map((j) => `
+    <div class="jour-semaine ${j.etat} ${j.estAujourdhui ? 'aujourdhui' : ''}" title="${esc(j.nom)}">
+      <span class="jour-rond">${j.etat === 'atteint' ? '✓' : j.lettre}</span>
+      <span class="jour-lettre">${j.lettre}</span>
+    </div>
+  `).join('');
 
   return `
     <section class="carte carte-objectif" aria-label="Mon objectif de lecture quotidien">
       ${diagrammeCirculaireHTML(prog.pourcent, { atteint: prog.atteint })}
       <div class="objectif-infos">
         <div class="objectif-entete">
-          <span class="surtitre">Objectif du jour · Privé</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="surtitre" style="margin:0">Objectif · Privé</span>
+            ${badgeSerie}
+          </div>
           <button type="button" class="btn btn-discret btn-objectif-reglage" data-action="regler-objectif">
             ${icones.crayon} Modifier
           </button>
         </div>
         <h2 class="objectif-titre">${esc(libelleUnite)}</h2>
         <p class="objectif-sous-texte">${esc(sousTexte)}</p>
-        <p class="objectif-detail">${esc(detailSecondaire)}</p>
+        <div class="semainier" aria-label="Activité de lecture de la semaine">${semainierHTML}</div>
       </div>
     </section>`;
 }
