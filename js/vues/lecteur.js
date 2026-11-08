@@ -7,6 +7,7 @@ import { etat } from '../etat.js';
 import { esc, icones, toast, erreurHTML, messageErreur, ouvrirFeuille } from '../ui.js';
 import { lireCache, ecrireCache, supprimerCache } from '../cache.js';
 import { themeActuel } from '../theme.js';
+import { enregistrerPageLue, enregistrerTempsLecture, calculerProgression, ouvrirReglageObjectif } from '../objectif.js';
 
 const CLE_REGLAGES = 'ebook-lecteur';
 const TAILLES = [16, 17, 18, 20, 22, 24, 27, 30, 34];
@@ -218,13 +219,42 @@ export async function afficher(racine, { params }) {
 
   function allerA(nouvel, direction) {
     if (nouvel < 0 || nouvel >= total || nouvel === index) return;
+    if (direction > 0) enregistrerPageLue(livre.id, index + 1);
     index = nouvel;
     window.scrollTo({ top: 0, behavior: 'instant' });
     rendre(direction);
     programmerMarquePage();
+    programmerValidationPage();
   }
   const suivante = () => allerA(index + 1, 1);
   const precedente = () => allerA(index - 1, -1);
+
+  // Validation d'une page après 4 secondes de lecture effective
+  let minuteriePageLue = null;
+  function programmerValidationPage() {
+    clearTimeout(minuteriePageLue);
+    if (!total) return;
+    minuteriePageLue = setTimeout(() => {
+      if (document.visibilityState !== 'hidden') {
+        enregistrerPageLue(livre.id, index + 1);
+      }
+    }, 4000);
+  }
+
+  // Chronomètre du temps de lecture actif (enregistré toutes les 15 s et à la sortie)
+  let debutTranche = Date.now();
+  function comptabiliserTranche() {
+    if (!total || document.visibilityState === 'hidden') {
+      debutTranche = Date.now();
+      return;
+    }
+    const ecoule = Math.floor((Date.now() - debutTranche) / 1000);
+    if (ecoule >= 3) {
+      enregistrerTempsLecture(Math.min(ecoule, 120));
+      debutTranche = Date.now();
+    }
+  }
+  const intervalleTemps = setInterval(comptabiliserTranche, 15000);
 
   // 4. Marque-page automatique (enregistré 0,8 s après le changement de page)
   function programmerMarquePage() {
@@ -366,15 +396,21 @@ export async function afficher(racine, { params }) {
   }
 
   function ouvrirMenu() {
+    const prog = calculerProgression();
     const f = ouvrir({
       titre: 'Options',
       contenu: `<ul class="liste-menu">
+        <li><button type="button" data-m="objectif">${icones.coche} Objectif du jour (${prog.pourcent} %)</button></li>
         <li><button type="button" data-m="avis">${icones.etoile.replace('fill="currentColor"', '')} Avis des lecteurs</button></li>
         ${total ? `<li><button type="button" data-m="aller">${icones.aller} Aller à la page…</button></li>
         <li><button type="button" data-m="modifier">${icones.crayon} Corriger le texte de cette page</button></li>` : ''}
         <li><a href="#/ajouter/${livre.id}">${icones.photo} Ajouter des pages</a></li>
         <li><a href="#/livre/${livre.id}">${icones.livre} Fiche du livre</a></li>
       </ul>`,
+    });
+    f.el.querySelector('[data-m="objectif"]').addEventListener('click', () => {
+      f.fermer();
+      ouvrirReglageObjectif();
     });
     f.el.querySelector('[data-m="avis"]').addEventListener('click', ouvrirAvis);
     f.el.querySelector('[data-m="aller"]')?.addEventListener('click', ouvrirAllerA);
@@ -472,7 +508,14 @@ export async function afficher(racine, { params }) {
     if (bulle && !bulle.contains(e.target) && !e.target.closest('.mot')) fermerBulle();
   };
   const surDefilement = () => fermerBulle();
-  const surCacher = () => { if (document.visibilityState === 'hidden' && minuterieMarque) enregistrerMarquePage(); };
+  const surCacher = () => {
+    if (document.visibilityState === 'hidden') {
+      comptabiliserTranche();
+      if (minuterieMarque) enregistrerMarquePage();
+    } else {
+      debutTranche = Date.now();
+    }
+  };
 
   document.addEventListener('keydown', surTouche);
   document.addEventListener('click', surClicDocument);
@@ -481,11 +524,15 @@ export async function afficher(racine, { params }) {
 
   appliquerReglages();
   rendre();
+  programmerValidationPage();
   // Synchronise le marque-page s'il avait été enregistré hors ligne
   if (enAttente) { livre.derniere_page = -1; programmerMarquePage(); }
 
   // 9. Nettoyage quand on quitte le lecteur
   return () => {
+    clearInterval(intervalleTemps);
+    clearTimeout(minuteriePageLue);
+    comptabiliserTranche();
     if (minuterieMarque) enregistrerMarquePage();
     feuilleOuverte?.fermer();
     fermerBulle();

@@ -5,6 +5,7 @@
 import { etat, pseudoActuel } from '../etat.js';
 import { esc, icones, toast, messageErreur, confirmer } from '../ui.js';
 import { viderCache } from '../cache.js';
+import { carteObjectifHTML, brancherCarteObjectif } from '../objectif.js';
 
 export async function afficher(racine) {
   // Si l'utilisateur est en cours de réinitialisation de mot de passe (suite à un lien reçu par e-mail)
@@ -36,6 +37,8 @@ async function afficherProfil(racine) {
     </div>
 
     ${etat.messageAuth ? `<div class="message message-${etat.messageAuth.type}" role="status">${esc(etat.messageAuth.texte)}</div>` : ''}
+
+    ${carteObjectifHTML()}
 
     <div class="carte">
       <h2 class="titre-3">Profil</h2>
@@ -80,6 +83,7 @@ async function afficherProfil(racine) {
   etat.messageAuth = null; // consommé
 
   brancherAffichageMdp(racine);
+  brancherCarteObjectif(racine, () => afficherProfil(racine));
 
   // Formulaire pseudo
   const formPseudo = racine.querySelector('#form-pseudo');
@@ -187,6 +191,7 @@ function afficherAuth(racine) {
 
     etat.messageAuth = null;
     brancherAffichageMdp(racine);
+  brancherCarteObjectif(racine, () => afficherProfil(racine));
     brancherEvenementsAuth();
   }
 
@@ -409,6 +414,7 @@ function afficherNouveauMotDePasse(racine) {
     </div>`;
 
   brancherAffichageMdp(racine);
+  brancherCarteObjectif(racine, () => afficherProfil(racine));
 
   const form = racine.querySelector('#form-reset');
   const msg = racine.querySelector('#reset-msg');

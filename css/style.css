@@ -494,10 +494,104 @@ body.mode-lecture .toasts { bottom: calc(90px + env(safe-area-inset-bottom)); }
   padding-top: calc(8px + env(safe-area-inset-top));
 }
 
-/* ---------- 8. Bibliothèque ---------- */
-.bib-entete { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 8px 0 22px; }
+/* ---------- 8. Bibliothèque & Objectif de lecture ---------- */
+.bib-entete { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 8px 0 18px; }
 .bib-entete .titre-page { margin: 0; }
 .bib-compte { color: var(--texte-2); font-size: .92rem; margin: 0; }
+
+/* Carte d'objectif de lecture avec diagramme circulaire */
+.carte-objectif {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--fond-2) 100%);
+}
+.objectif-anneau {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.objectif-anneau svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.anneau-fond {
+  fill: none;
+  stroke: var(--bordure);
+  stroke-width: 8;
+}
+.anneau-valeur {
+  fill: none;
+  stroke: var(--primaire);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 600ms var(--transition), stroke 300ms ease;
+}
+.objectif-anneau.atteint .anneau-valeur {
+  stroke: var(--succes);
+}
+.anneau-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.anneau-pourcent {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--texte);
+  letter-spacing: -.02em;
+}
+.anneau-pourcent small {
+  font-size: .78rem;
+  font-weight: 600;
+  margin-left: 1px;
+  color: var(--texte-2);
+}
+.objectif-anneau.atteint .anneau-pourcent {
+  color: var(--succes);
+}
+.objectif-infos {
+  flex: 1;
+  min-width: 0;
+}
+.objectif-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.btn-objectif-reglage {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: .82rem;
+}
+.btn-objectif-reglage svg {
+  width: 15px;
+  height: 15px;
+}
+.objectif-titre {
+  font-size: 1.18rem;
+  margin: 0 0 4px;
+}
+.objectif-sous-texte {
+  font-size: .88rem;
+  color: var(--texte-2);
+  margin: 0 0 4px;
+}
+.objectif-detail {
+  font-size: .78rem;
+  color: var(--texte-2);
+  margin: 0;
+  opacity: .85;
+}
 
 .grille-livres {
   list-style: none; margin: 0; padding: 0;

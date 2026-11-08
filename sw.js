@@ -2,7 +2,7 @@
 //  Service Worker : mise en cache du shell de l'application pour le hors-ligne
 // =============================================================================
 
-const VERSION = 'ebook-v5';
+const VERSION = 'ebook-v6';
 const FICHIERS_STATIQUES = [
   './',
   'index.html',
@@ -16,6 +16,7 @@ const FICHIERS_STATIQUES = [
   'js/ocr.js',
   'js/traduction.js',
   'js/avis.js',
+  'js/objectif.js',
   'js/vues/bibliotheque.js',
   'js/vues/ajouter.js',
   'js/vues/lecteur.js',

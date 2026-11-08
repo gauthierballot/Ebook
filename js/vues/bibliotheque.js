@@ -3,6 +3,7 @@
 import { etat, pseudoActuel } from '../etat.js';
 import { esc, icones, couvertureHTML, hydraterCouvertures, erreurHTML, messageErreur } from '../ui.js';
 import { lireCache, ecrireCache } from '../cache.js';
+import { carteObjectifHTML, brancherCarteObjectif } from '../objectif.js';
 
 export async function afficher(racine) {
   const cleCache = `bibliotheque:${etat.user.id}`;
@@ -39,12 +40,14 @@ function rendre(racine, livres) {
 
   if (!livres.length) {
     racine.innerHTML = `
+      ${carteObjectifHTML()}
       <section class="etat-vide bib-vide">
         <span class="logo-e grand" aria-hidden="true">E</span>
         <h1 class="titre-page">Ta bibliothèque t'attend</h1>
         <p>Photographie les pages d'un livre que tu possèdes : Ebook les transforme en un livre numérique à lire partout.</p>
         <a href="#/ajouter" class="btn btn-primaire">${icones.plus} Ajouter mon premier livre</a>
       </section>${fab}`;
+    brancherCarteObjectif(racine, () => rendre(racine, livres));
     return;
   }
 
@@ -79,8 +82,10 @@ function rendre(racine, livres) {
       </div>
       <p class="bib-compte">${livres.length} livre${livres.length > 1 ? 's' : ''}</p>
     </div>
+    ${carteObjectifHTML()}
     <ul class="grille-livres">${cartes}</ul>
     ${fab}`;
+  brancherCarteObjectif(racine, () => rendre(racine, livres));
   hydraterCouvertures(racine);
 }
 
