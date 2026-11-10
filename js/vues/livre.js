@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { etat } from '../etat.js';
-import { esc, icones, couvertureHTML, hydraterCouvertures, lireMetaApple, erreurHTML, messageErreur, toast, confirmer, libelleType, libelleLangue, formatDate, ouvrirFeuille, ouvrirFeuilleResume } from '../ui.js';
+import { esc, icones, couvertureHTML, hydraterCouvertures, lireMetaApple, erreurHTML, messageErreur, toast, confirmer, libelleType, libelleLangue, formatDate, ouvrirFeuille, ouvrirFeuilleResume, ouvrirFeuilleVersionsLibres } from '../ui.js';
 import { monterAvis } from '../avis.js';
 import { supprimerCache } from '../cache.js';
 import { lireCitationsLivre, ouvrirCarnetCitations } from '../citations.js';
@@ -61,6 +61,7 @@ export async function afficher(racine, { params }) {
           }
           <a class="btn btn-secondaire" href="#/ajouter/${livre.id}">${icones.plus} Ajouter des pages</a>
           <button type="button" class="btn btn-secondaire" data-action="resume">📖 Résumé du livre</button>
+          <button type="button" class="btn btn-secondaire" data-action="versions-libres">🌐 Versions (FR / EN / VO)</button>
           <button type="button" class="btn btn-secondaire" data-action="citations">${icones.signet} Citations & notes (${lireCitationsLivre(livre.id).length})</button>
           <button type="button" class="btn btn-secondaire" data-action="modifier">${icones.crayon} Modifier</button>
           <button type="button" class="btn btn-discret" style="color:var(--danger)" data-action="supprimer">${icones.corbeille} Supprimer</button>
@@ -95,6 +96,16 @@ export async function afficher(racine, { params }) {
       couverture: meta?.couverture || '',
       resumeInitial: meta?.resume || '',
       token: etat.session?.access_token,
+    });
+  });
+
+  // Versions gratuites en accès libre (Français, Anglais, et VO si non FR/EN)
+  racine.querySelector('[data-action="versions-libres"]').addEventListener('click', () => {
+    ouvrirFeuilleVersionsLibres({
+      livre,
+      token: etat.session?.access_token,
+      etat,
+      supprimerCache,
     });
   });
 

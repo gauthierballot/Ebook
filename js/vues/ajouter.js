@@ -6,7 +6,7 @@ import { etat } from '../etat.js';
 import { esc, icones, toast, erreurHTML, messageErreur, libelleType, enregistrerMetaApple, ouvrirFeuilleResume } from '../ui.js';
 import { supprimerCache } from '../cache.js';
 
-// Sélection des grands classiques gratuits présents sur Apple Livres + Project Gutenberg (texte intégral vérifié)
+// Sélection des grands classiques gratuits présents sur Apple Livres + Project Gutenberg (versions FR, EN et VO vérifiées)
 const CLASSIQUES_APPLE = [
   {
     id: 17489,
@@ -14,6 +14,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Victor Hugo',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 17489, titre: 'Les Misérables — Tome I', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 135, titre: 'Les Misérables (English)', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication7/v4/c3/ea/2e/c3ea2e71-e8a6-7b2e-38b2-9133445afef2/coverArt.2311cd.jpg/600x600bb.jpg',
     resume: "En 1815, Jean Valjean est libéré après dix-neuf ans de bagne pour avoir volé un pain. Rejeté de tous, il croise la route de Mgr Myriel qui bouleverse son destin, tandis que le destin tragique de Fantine et de sa petite Cosette se noue sous l'œil implacable de l'inspecteur Javert.",
   },
@@ -23,6 +27,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Alexandre Dumas',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 17989, titre: 'Le Comte de Monte-Cristo — Tome I', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 1184, titre: 'The Count of Monte Cristo', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/6b/2e/71/6b2e7171-9764-0336-95f2-fd8d03be90ef/coverArt.c5ee7e.jpg/600x600bb.jpg',
     resume: "Jeune marin promis à un bel avenir et sur le point d'épouser Mercédès, Edmond Dantès est victime d'un complot jaloux et enfermé au château d'If. Sa rencontre secrète avec l'abbé Faria lui ouvre la voie de la liberté, du trésor de Monte-Cristo et d'une vengeance magistrale.",
   },
@@ -32,6 +40,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Victor Hugo',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 6838, titre: "Le Dernier Jour d'un condamné", langue: 'fr', nomLangue: 'Français' },
+      en: { id: 65215, titre: 'The Last Day of a Condemned', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/9c/30/f8/9c30f83e-c6ab-eb1f-253e-d704d7ff1346/PD_Le_dernier_jour_d_un_condamne-Adj.jpg/600x600bb.jpg',
     resume: "De sa cellule de Bicêtre jusqu'à l'échafaud de la place de Grève, un homme condamné à mort confie heure par heure ses pensées, ses angoisses, ses souvenirs d'enfance et la douleur déchirante de laisser derrière lui sa petite fille de trois ans. Un plaidoyer bouleversant contre la peine de mort.",
   },
@@ -41,6 +53,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Maurice Leblanc',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 32854, titre: 'Arsène Lupin, gentleman-cambrioleur', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 6133, titre: 'The Extraordinary Adventures of Arsène Lupin', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication124/v4/42/aa/46/42aa463c-b168-2211-89a1-3c8f71d15134/Lupincover_podklad_fr.jpg/600x600bb.jpg',
     resume: "Maître du déguisement, de l'ironie et du panache, Arsène Lupin dépouille les châteaux et les milliardaires avec une élégance infaillible. De son arrestation sur un transatlantique à son évasion de la Santé et son premier duel avec Herlock Sholmes, neuf aventures pleines d'esprit et de mystère.",
   },
@@ -50,6 +66,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Jules Verne',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 20973, titre: 'Le Tour du monde en 80 jours', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 103, titre: 'Around the World in Eighty Days', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication6/v4/27/06/b8/2706b858-79d6-a463-df8f-d3d95a2a6b99/PDFR001850.jpg/600x600bb.jpg',
     resume: "Le flegmatique gentleman londonien Phileas Fogg parie la moitié de sa fortune qu'il fera le tour de la Terre en quatre-vingts jours. Accompagné de son fidèle valet français Passepartout et poursuivi par l'inspecteur Fix, il se lance dans une course haletante à travers les continents.",
   },
@@ -59,6 +79,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Jules Verne',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 5097, titre: 'Vingt mille lieues sous les mers', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 164, titre: 'Twenty Thousand Leagues under the Sea', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication62/v4/58/50/23/5850238d-daec-7bd3-3293-83839c45e15c/coverArt.a7a47a.jpg/600x600bb.jpg',
     resume: "Partis traquer un mystérieux monstre marin, le professeur Aronnax, son domestique Conseil et le harponneur Ned Land sont recueillis à bord du Nautilus, le sous-marin prodige de l'énigmatique capitaine Nemo. Commence alors une odyssée inoubliable au cœur des océans.",
   },
@@ -68,6 +92,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Edmond Rostand',
     type: 'theatre',
     langue: 'fr',
+    versions: {
+      fr: { id: 1256, titre: 'Cyrano de Bergerac', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 1254, titre: 'Cyrano de Bergerac (English)', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication1/v4/18/9e/7a/189e7a40-e609-8f03-1978-c017a94a3813/coverArt.8b64e8.jpg/600x600bb.jpg',
     resume: "Bretteur intrépide et poète étincelant affublé d'un nez démesuré, Cyrano aime en secret sa cousine Roxane. Mais Roxane aime le beau Christian, qui manque d'esprit : par amour, Cyrano prête sa voix et ses lettres à son rival dans un chef-d'œuvre de panache et d'émotion.",
   },
@@ -77,6 +105,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Molière',
     type: 'theatre',
     langue: 'fr',
+    versions: {
+      fr: { id: 6318, titre: "L'Avare", langue: 'fr', nomLangue: 'Français' },
+      en: { id: 6923, titre: 'The Miser', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication4/v4/19/92/ff/1992fff4-b290-b2f9-5807-64d868c69332/9782806231994.jpg/600x600bb.jpg',
     resume: "Obsédé par sa cassette d'or enterrée dans son jardin, le vieil Harpagon tyrannise sa maison et prétend marier ses enfants Cléante et Élise contre leur gré tout en convoitant la jeune Mariane. Une comédie incisive et irrésistible sur l'avarice et les passions humaines.",
   },
@@ -86,6 +118,10 @@ const CLASSIQUES_APPLE = [
     auteur: 'Guy de Maupassant',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 10775, titre: 'Le Horla', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 3080, titre: 'The Horla and Other Stories', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication114/v4/60/83/4e/60834ea6-55ee-476c-4fdf-d8c9e9513e69/PD_Le_horla-Adj.jpg/600x600bb.jpg',
     resume: "Sous la forme d'un journal intime, le narrateur raconte comment une présence invisible et troublante — le Horla — s'empare peu à peu de ses nuits, boit l'eau de sa carafe et gouverne sa volonté. Sombre-t-il dans la folie ou un être surnaturel le hante-t-il réellement ?",
   },
@@ -95,8 +131,40 @@ const CLASSIQUES_APPLE = [
     auteur: 'Gustave Flaubert',
     type: 'roman',
     langue: 'fr',
+    versions: {
+      fr: { id: 14155, titre: 'Madame Bovary', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 2413, titre: 'Madame Bovary (English)', langue: 'en', nomLangue: 'Anglais' },
+    },
     couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication211/v4/fd/4f/30/fd4f300a-e01a-84ad-034e-0ecf578e4853/303e0c05-2e3a-4cc2-aecc-cdbea53f8a07_cover_image.jpg/600x600bb.jpg',
     resume: "Nourrie de lectures romantiques, Emma épouse Charles Bovary, modeste médecin de province, mais étouffe rapidement dans la monotonie conjugale. Rêvant de luxe et de passions ardentes, elle cherche l'évasion dans l'adultère et les dépenses jusqu'au vertige.",
+  },
+  {
+    id: 16066,
+    titre: 'Don Quichotte — Tome I',
+    auteur: 'Miguel de Cervantes',
+    type: 'roman',
+    langue: 'fr',
+    versions: {
+      fr: { id: 16066, titre: 'Don Quichotte — Tome I', langue: 'fr', nomLangue: 'Français' },
+      en: { id: 5921, titre: 'Don Quixote — Vol. I', langue: 'en', nomLangue: 'Anglais' },
+      vo: { id: 2000, titre: 'Don Quijote (VO Espagnol)', langue: 'es', nomLangue: 'Espagnol' },
+    },
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication221/v4/59/98/53/59985377-76e3-8e4d-d4f9-1181e76ac663/9782080153784.jpg/600x600bb.jpg',
+    resume: "Fasciné par les romans de chevalerie, l'hidalgo Alonso Quichano se baptise Don Quichotte de la Manche et part redresser les torts sur son maigre cheval Rossinante, accompagné du fidèle Sancho Panza, prenant les moulins à vent pour des géants.",
+  },
+  {
+    id: 22768,
+    titre: "La Divine Comédie : L'Enfer",
+    auteur: 'Dante Alighieri',
+    type: 'roman',
+    langue: 'fr',
+    versions: {
+      fr: { id: 22768, titre: "La Divine Comédie : L'Enfer", langue: 'fr', nomLangue: 'Français' },
+      en: { id: 41537, titre: 'The Divine Comedy: The Inferno', langue: 'en', nomLangue: 'Anglais' },
+      vo: { id: 1009, titre: 'La Divina Commedia: Inferno (VO Italien)', langue: 'it', nomLangue: 'Italien' },
+    },
+    couverture: 'https://is1-ssl.mzstatic.com/image/thumb/Publication211/v4/00/6e/ea/006eea7e-f0ef-5151-ebd4-04b730694b4d/cover.jpg/600x600bb.jpg',
+    resume: "Égaré dans une forêt obscure au milieu du chemin de sa vie, le poète Dante est guidé par l'ombre de Virgile à travers les neuf cercles concentriques de l'Enfer. Un voyage vertigineux et fondateur de la littérature européenne.",
   },
 ];
 
@@ -174,17 +242,24 @@ function afficherFormulaire(racine) {
         Ces classiques gratuits sur Apple Livres ont plus de 70 ans : clique sur une couverture pour ajouter directement tout le livre dans ta bibliothèque.
       </p>
       <div class="grille-classiques-apple" id="grille-classiques">
-        ${CLASSIQUES_APPLE.map((c, idx) => `
-          <div class="carte-classique-apple">
-            <img class="couv-mini" src="${esc(c.couverture)}" alt="${esc(c.titre)}" loading="lazy" data-classique-resume="${idx}" style="cursor:pointer" title="Voir le résumé">
-            <span class="titre-mini">${esc(c.titre)}</span>
-            <span class="auteur-mini">${esc(c.auteur)}</span>
-            <div class="actions-classique-mini">
-              <button type="button" class="btn-mini-resume" data-classique-resume="${idx}" aria-label="Voir le résumé de ${esc(c.titre)}">📖 Résumé</button>
-              <button type="button" class="badge-gratuit" data-classique-idx="${idx}" aria-label="Importer intégralement ${esc(c.titre)}">📥 Importer</button>
+        ${CLASSIQUES_APPLE.map((c, idx) => {
+          const aVo = Boolean(c.versions?.vo?.id && c.versions.vo.langue !== 'fr' && c.versions.vo.langue !== 'en');
+          return `
+            <div class="carte-classique-apple">
+              <img class="couv-mini" src="${esc(c.couverture)}" alt="${esc(c.titre)}" loading="lazy" data-classique-resume="${idx}" style="cursor:pointer" title="Voir le résumé et les versions">
+              <span class="titre-mini">${esc(c.titre)}</span>
+              <span class="auteur-mini">${esc(c.auteur)}</span>
+              <div class="actions-classique-mini">
+                <button type="button" class="btn-mini-resume" data-classique-resume="${idx}" aria-label="Voir le résumé de ${esc(c.titre)}">📖 Résumé</button>
+                <div class="rangee-versions-mini" role="group" aria-label="Choisir la version de ${esc(c.titre)}">
+                  ${c.versions?.fr ? `<button type="button" class="btn-ver-mini" data-classique-ver="${idx}:fr" title="Importer la version française (${esc(c.versions.fr.titre)})">🇫🇷 FR</button>` : ''}
+                  ${c.versions?.en ? `<button type="button" class="btn-ver-mini" data-classique-ver="${idx}:en" title="Importer la version anglaise (${esc(c.versions.en.titre)})">🇬🇧 EN</button>` : ''}
+                  ${aVo ? `<button type="button" class="btn-ver-mini vo" data-classique-ver="${idx}:vo" title="Importer la VO en ${esc(c.versions.vo.nomLangue)} (${esc(c.versions.vo.titre)})">🌍 VO</button>` : ''}
+                </div>
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     </section>
 
@@ -200,32 +275,47 @@ function afficherFormulaire(racine) {
   let delaiRecherche = null;
   let ocrModule = null;
 
-  function selectionnerClassique(c, importerDirect = false) {
+  function importerVersionClassique(c, cleVer = 'fr') {
     if (!c) return;
-    form.titre.value = c.titre;
+    const ver = c.versions?.[cleVer] || c.versions?.fr || { id: c.id, titre: c.titre, langue: 'fr', nomLangue: 'Français' };
+    form.titre.value = ver.titre || c.titre;
     form.auteur.value = c.auteur;
     form.querySelector(c.type === 'theatre' ? '#type-theatre' : '#type-roman').checked = true;
-    form.querySelector('#langue-fr').checked = true;
-    enregistrerMetaApple(c.titre, c.auteur, { couverture: c.couverture, resume: c.resume || '' });
+    form.querySelector(ver.langue === 'en' ? '#langue-en' : '#langue-fr').checked = true;
+    enregistrerMetaApple(ver.titre || c.titre, c.auteur, {
+      couverture: c.couverture,
+      resume: c.resume || '',
+      versions: c.versions || null,
+      langueEdition: ver.langue || 'fr',
+      nomLangueEdition: ver.nomLangue || 'Français',
+    });
     afficherResultatLibre([{
-      id: c.id,
-      titre: c.titre,
+      id: ver.id,
+      titre: ver.titre || c.titre,
       auteur: c.auteur,
+      langue: ver.langue || 'fr',
+      nomLangue: ver.nomLangue || 'Français',
       libre: true,
       couverture: c.couverture,
       resume: c.resume || '',
-    }], { couverture: c.couverture, resume: c.resume || '' });
-    if (importerDirect) {
-      zoneLibre.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      lancerImportComplet(c.id, { couverture: c.couverture, resume: c.resume || '' });
-    }
+    }], { couverture: c.couverture, resume: c.resume || '' }, c.versions || null);
+    zoneLibre.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    lancerImportComplet(ver.id, {
+      titre: ver.titre || c.titre,
+      couverture: c.couverture,
+      resume: c.resume || '',
+      versions: c.versions || null,
+      langue: ver.langue || 'fr',
+      nomLangue: ver.nomLangue || 'Français',
+    });
   }
 
-  // --- Clic sur « Importer » d'un classique de la sélection Apple Livres ---
-  racine.querySelectorAll('[data-classique-idx]').forEach((btn) => {
+  // --- Clic sur un bouton de version (🇫🇷 FR, 🇬🇧 EN ou 🌍 VO) d'un classique ---
+  racine.querySelectorAll('[data-classique-ver]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const c = CLASSIQUES_APPLE[Number(btn.getAttribute('data-classique-idx'))];
-      selectionnerClassique(c, true);
+      const [idxStr, cleVer] = (btn.getAttribute('data-classique-ver') || '').split(':');
+      const c = CLASSIQUES_APPLE[Number(idxStr)];
+      importerVersionClassique(c, cleVer || 'fr');
     });
   });
 
@@ -239,8 +329,10 @@ function afficherFormulaire(racine) {
         auteur: c.auteur,
         couverture: c.couverture,
         resumeInitial: c.resume || '',
+        versions: c.versions || null,
         token: etat.session?.access_token,
-        surImporter: () => selectionnerClassique(c, true),
+        surImporter: () => importerVersionClassique(c, 'fr'),
+        surImporterVersion: (_ver, cle) => importerVersionClassique(c, cle),
       });
     });
   });
@@ -289,7 +381,7 @@ function afficherFormulaire(racine) {
         form.querySelector('#langue-fr').checked = true;
       }
 
-      afficherResultatLibre(donnees.resultats || [], donnees.metaApple || null);
+      afficherResultatLibre(donnees.resultats || [], donnees.metaApple || null, donnees.versions || null);
     } catch (e) {
       couvStatut.innerHTML = `<span style="color:var(--danger)">${esc(e.message || 'Échec de l\'analyse')}</span>`;
     }
@@ -315,7 +407,7 @@ function afficherFormulaire(racine) {
       zoneLibre.innerHTML = '';
       return;
     }
-    zoneLibre.innerHTML = '<p class="aide" style="margin:10px 0;"><span class="roue petite" aria-hidden="true"></span> Recherche sur Apple Livres & bibliothèque libre…</p>';
+    zoneLibre.innerHTML = '<p class="aide" style="margin:10px 0;"><span class="roue petite" aria-hidden="true"></span> Recherche des versions (FR, EN & VO) sur Apple Livres & bibliothèque libre…</p>';
     delaiRecherche = setTimeout(async () => {
       try {
         const token = etat.session?.access_token;
@@ -336,8 +428,8 @@ function afficherFormulaire(racine) {
           zoneLibre.innerHTML = '';
           return;
         }
-        const { resultats, metaApple } = await r.json();
-        afficherResultatLibre(resultats || [], metaApple || null);
+        const { resultats, metaApple, versions } = await r.json();
+        afficherResultatLibre(resultats || [], metaApple || null, versions || null);
       } catch {
         zoneLibre.innerHTML = '';
       }
@@ -348,12 +440,12 @@ function afficherFormulaire(racine) {
   form.auteur.addEventListener('input', planifierRecherche);
   form.querySelectorAll('input[name="langue"]').forEach((i) => i.addEventListener('change', planifierRecherche));
 
-  // --- Affichage du résultat (Couverture Apple + Statut Domaine Public) ---
-  function afficherResultatLibre(resultats, metaApple = null) {
+  // --- Affichage du résultat (Couverture Apple + Statut Domaine Public + Versions FR / EN / VO) ---
+  function afficherResultatLibre(resultats, metaApple = null, versionsServeur = null) {
     const titreSaisi = form.titre.value.trim();
     const auteurSaisi = form.auteur.value.trim();
-    if (metaApple && titreSaisi) {
-      enregistrerMetaApple(titreSaisi, auteurSaisi, metaApple);
+    if ((metaApple || versionsServeur) && titreSaisi) {
+      enregistrerMetaApple(titreSaisi, auteurSaisi, { ...(metaApple || {}), versions: versionsServeur });
     }
 
     const couvUrl = resultats?.[0]?.couverture || metaApple?.couverture || '';
@@ -382,6 +474,14 @@ function afficherFormulaire(racine) {
     const libre = resultats.find((r) => r.libre) || resultats[0];
 
     if (libre.libre) {
+      // Construire les versions disponibles : FR, EN et VO (uniquement si la VO n'est ni française ni anglaise)
+      const vers = versionsServeur || {
+        fr: resultats.find((r) => r.libre && r.langue === 'fr') || (libre.langue === 'fr' ? libre : null),
+        en: resultats.find((r) => r.libre && r.langue === 'en') || (libre.langue === 'en' ? libre : null),
+        vo: resultats.find((r) => r.libre && r.langue && r.langue !== 'fr' && r.langue !== 'en') || null,
+      };
+      const aVoSeparee = Boolean(vers?.vo?.id && vers.vo.langue && vers.vo.langue !== 'fr' && vers.vo.langue !== 'en');
+
       zoneLibre.innerHTML = `
         <div class="carte-libre-trouve">
           <span class="badge-domaine-public">✨ Gratuit sur Apple Livres & Domaine Public</span>
@@ -389,19 +489,65 @@ function afficherFormulaire(racine) {
             <h3 style="font-size:1.1rem;margin:4px 0 2px;">${esc(libre.titre)}</h3>
             <p style="margin:0 0 8px;color:var(--texte-2);font-size:.88rem;">${esc(libre.auteur)}${libre.annees ? ' (' + esc(libre.annees) + ')' : ''}</p>
           `}
-          <p style="margin:0 0 12px;font-size:.9rem;">
-            Ce classique fait partie du <strong>domaine public</strong> (auteur décédé il y a plus de 70 ans). Tu peux importer son texte intégral et sa couverture officielle en 1 clic !
+          <p style="margin:0 0 10px;font-size:.9rem;">
+            Ce classique fait partie du <strong>domaine public</strong>. Choisis la version gratuite à importer en 1 clic :
           </p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-secondaire" id="btn-resume-libre" style="flex:1;min-width:140px">
-              📖 Voir le résumé
-            </button>
-            <button type="button" class="btn btn-succes" id="btn-import-libre" style="flex:2;min-width:180px">
-              📥 Importer tout le livre en 1 clic
+
+          <div class="grille-versions-libres" id="grille-versions-trouvees">
+            ${vers?.fr?.id ? `
+              <button type="button" class="btn-version-libre" data-import-ver="fr">
+                <span class="drapeau-ver">🇫🇷</span>
+                <span><strong>Version française</strong><small>${esc(vers.fr.titre || libre.titre)}</small></span>
+              </button>` : ''}
+            ${vers?.en?.id ? `
+              <button type="button" class="btn-version-libre" data-import-ver="en">
+                <span class="drapeau-ver">🇬🇧</span>
+                <span><strong>Version anglaise</strong><small>${esc(vers.en.titre || libre.titre)}</small></span>
+              </button>` : ''}
+            ${aVoSeparee ? `
+              <button type="button" class="btn-version-libre vo" data-import-ver="vo">
+                <span class="drapeau-ver">🌍</span>
+                <span><strong>Version VO (${esc(vers.vo.nomLangue || vers.vo.langue.toUpperCase())})</strong><small>${esc(vers.vo.titre || libre.titre)}</small></span>
+              </button>` : ''}
+            ${(!vers?.fr?.id && !vers?.en?.id && !aVoSeparee) ? `
+              <button type="button" class="btn btn-succes btn-bloc" id="btn-import-libre">
+                📥 Importer tout le livre en 1 clic
+              </button>` : ''}
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button type="button" class="btn btn-secondaire btn-bloc" id="btn-resume-libre">
+              📖 Voir le résumé du livre
             </button>
           </div>
           <p class="aide" style="margin-top:8px;text-align:center;font-size:.8rem;">Ou continue ci-dessous pour numériser tes propres pages manuellement.</p>
         </div>`;
+
+      const declencherVersion = (cle) => {
+        const v = vers?.[cle] || libre;
+        if (!v?.id) return;
+        lancerImportComplet(v.id, {
+          titre: v.titre || libre.titre || titreSaisi,
+          couverture: libre.couverture || metaApple?.couverture,
+          resume: libre.resume || metaApple?.resume,
+          versions: vers,
+          langue: v.langue || 'fr',
+          nomLangue: v.nomLangue || (v.langue === 'en' ? 'Anglais' : 'Français'),
+        }, zoneLibre.querySelector(`[data-import-ver="${cle}"]`));
+      };
+
+      zoneLibre.querySelectorAll('[data-import-ver]').forEach((btn) => {
+        btn.addEventListener('click', () => declencherVersion(btn.getAttribute('data-import-ver')));
+      });
+
+      zoneLibre.querySelector('#btn-import-libre')?.addEventListener('click', () => lancerImportComplet(libre.id, {
+        titre: libre.titre || titreSaisi,
+        couverture: libre.couverture || metaApple?.couverture,
+        resume: libre.resume || metaApple?.resume,
+        versions: vers,
+        langue: libre.langue || form.langue.value,
+        nomLangue: libre.nomLangue || '',
+      }));
 
       zoneLibre.querySelector('#btn-resume-libre').addEventListener('click', () => {
         ouvrirFeuilleResume({
@@ -409,18 +555,16 @@ function afficherFormulaire(racine) {
           auteur: libre.auteur || auteurSaisi,
           couverture: libre.couverture || metaApple?.couverture || '',
           resumeInitial: libre.resume || metaApple?.resume || '',
+          versions: vers,
           token: etat.session?.access_token,
           surImporter: () => lancerImportComplet(libre.id, {
             couverture: libre.couverture || metaApple?.couverture,
             resume: libre.resume || metaApple?.resume,
+            versions: vers,
           }),
+          surImporterVersion: (_v, cle) => declencherVersion(cle),
         });
       });
-
-      zoneLibre.querySelector('#btn-import-libre').addEventListener('click', () => lancerImportComplet(libre.id, {
-        couverture: libre.couverture || metaApple?.couverture,
-        resume: libre.resume || metaApple?.resume,
-      }));
     } else {
       zoneLibre.innerHTML = `
         <div class="carte-libre-refuse">
@@ -433,10 +577,11 @@ function afficherFormulaire(racine) {
   }
 
   // --- Import intégral en 1 clic ---
-  async function lancerImportComplet(idGutenberg, meta = null) {
-    const bouton = zoneLibre.querySelector('#btn-import-libre');
+  async function lancerImportComplet(idGutenberg, meta = null, boutonClique = null) {
+    const bouton = boutonClique || zoneLibre.querySelector('#btn-import-libre');
+    const tousBoutons = [...zoneLibre.querySelectorAll('[data-import-ver], #btn-import-libre')];
+    tousBoutons.forEach((b) => { b.disabled = true; });
     if (bouton) {
-      bouton.disabled = true;
       bouton.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Récupération et pagination du texte…';
     }
 
@@ -460,14 +605,25 @@ function afficherFormulaire(racine) {
         throw new Error(err.erreur || "Impossible d'importer le texte de ce livre.");
       }
 
-      const { titre, pages } = await r.json();
+      const { titre, langue: langueGutenberg, nomLangue: nomLangueGutenberg, pages } = await r.json();
       if (bouton) bouton.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
 
-      const titreFinal = form.titre.value.trim() || titre;
-      const auteurFinal = form.auteur.value.trim();
-      if (meta?.couverture) {
-        enregistrerMetaApple(titreFinal, auteurFinal, meta);
+      const codeLang = meta?.langue || langueGutenberg || form.langue.value || 'fr';
+      const nomLang = meta?.nomLangue || nomLangueGutenberg || (codeLang === 'en' ? 'Anglais' : 'Français');
+      let titreFinal = (meta?.titre || form.titre.value.trim() || titre).slice(0, 180);
+      if (codeLang !== 'fr' && codeLang !== 'en' && !/VO/i.test(titreFinal)) {
+        titreFinal = `${titreFinal} (VO · ${nomLang})`.slice(0, 200);
       }
+      const auteurFinal = form.auteur.value.trim();
+
+      // La colonne Supabase books.langue accepte 'fr' ou 'en'
+      const langueBdd = codeLang === 'en' ? 'en' : 'fr';
+
+      enregistrerMetaApple(titreFinal, auteurFinal, {
+        ...(meta || {}),
+        langueEdition: codeLang,
+        nomLangueEdition: nomLang,
+      });
 
       // 1. Créer le livre dans Supabase
       const { data: livreCree, error: errLivre } = await etat.supabase
@@ -476,7 +632,7 @@ function afficherFormulaire(racine) {
           titre: titreFinal,
           auteur: auteurFinal,
           type: form.type.value,
-          langue: form.langue.value,
+          langue: langueBdd,
           user_id: etat.user.id,
         })
         .select('id')
@@ -500,6 +656,7 @@ function afficherFormulaire(racine) {
       toast(`Livre intégral importé avec succès (${pages.length} pages) !`);
       location.hash = `#/lecteur/${livreCree.id}`;
     } catch (e) {
+      tousBoutons.forEach((b) => { b.disabled = false; });
       if (bouton) {
         bouton.disabled = false;
         bouton.innerHTML = '📥 Réessayer l\'import';
@@ -659,52 +816,84 @@ async function afficherPages(racine, idLivre) {
               langue: livre.langue,
             }),
           });
-          const { resultats = [] } = await r.json();
+          const { resultats = [], versions = null } = await r.json();
           const match = resultats.find((x) => x.libre);
           if (match) {
+            const vers = versions || {
+              fr: resultats.find((x) => x.libre && x.langue === 'fr') || (match.langue === 'fr' ? match : null),
+              en: resultats.find((x) => x.libre && x.langue === 'en') || (match.langue === 'en' ? match : null),
+              vo: resultats.find((x) => x.libre && x.langue && x.langue !== 'fr' && x.langue !== 'en') || null,
+            };
+            const aVoSeparee = Boolean(vers?.vo?.id && vers.vo.langue && vers.vo.langue !== 'fr' && vers.vo.langue !== 'en');
+
             zoneRetourRapide.innerHTML = `
               <div class="carte-libre-trouve" style="margin:0;">
                 <span class="badge-domaine-public">✨ Version complète trouvée</span>
                 <p style="margin:4px 0 10px;font-size:.9rem;">
-                  <strong>${esc(match.titre)}</strong> (${esc(match.auteur)}) est dans le domaine public !
+                  <strong>${esc(match.titre)}</strong> (${esc(match.auteur)}) est dans le domaine public ! Choisis la version à importer :
                 </p>
-                <button type="button" class="btn btn-succes btn-bloc" id="btn-remplir-livre">
-                  📥 Importer toutes les pages maintenant
-                </button>
+                <div class="grille-versions-libres">
+                  ${vers?.fr?.id ? `
+                    <button type="button" class="btn-version-libre" data-remplir-id="${vers.fr.id}" data-remplir-lang="fr">
+                      <span class="drapeau-ver">🇫🇷</span>
+                      <span><strong>Version française</strong><small>${esc(vers.fr.titre || match.titre)}</small></span>
+                    </button>` : ''}
+                  ${vers?.en?.id ? `
+                    <button type="button" class="btn-version-libre" data-remplir-id="${vers.en.id}" data-remplir-lang="en">
+                      <span class="drapeau-ver">🇬🇧</span>
+                      <span><strong>Version anglaise</strong><small>${esc(vers.en.titre || match.titre)}</small></span>
+                    </button>` : ''}
+                  ${aVoSeparee ? `
+                    <button type="button" class="btn-version-libre vo" data-remplir-id="${vers.vo.id}" data-remplir-lang="fr">
+                      <span class="drapeau-ver">🌍</span>
+                      <span><strong>Version VO (${esc(vers.vo.nomLangue || vers.vo.langue.toUpperCase())})</strong><small>${esc(vers.vo.titre || match.titre)}</small></span>
+                    </button>` : ''}
+                  ${(!vers?.fr?.id && !vers?.en?.id && !aVoSeparee) ? `
+                    <button type="button" class="btn btn-succes btn-bloc" data-remplir-id="${match.id}" data-remplir-lang="${match.langue === 'en' ? 'en' : 'fr'}">
+                      📥 Importer toutes les pages maintenant
+                    </button>` : ''}
+                </div>
               </div>`;
-            zoneRetourRapide.querySelector('#btn-remplir-livre').addEventListener('click', async (e) => {
-              const b = e.currentTarget;
-              b.disabled = true;
-              b.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Récupération et pagination…';
-              try {
-                const rImp = await fetch('/api/livre-libre', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                  },
-                  body: JSON.stringify({ action: 'importer', id: match.id, type: livre.type }),
-                });
-                const { pages = [] } = await rImp.json();
-                b.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
-                const tailleLot = 50;
-                for (let i = 0; i < pages.length; i += tailleLot) {
-                  const lot = pages.slice(i, i + tailleLot).map((texte, idx) => ({
-                    book_id: livre.id,
-                    numero: i + idx + 1,
-                    texte,
-                  }));
-                  await etat.supabase.from('pages').insert(lot);
+            zoneRetourRapide.querySelectorAll('[data-remplir-id]').forEach((btnRemp) => {
+              btnRemp.addEventListener('click', async (e) => {
+                const b = e.currentTarget;
+                const idImport = Number(b.getAttribute('data-remplir-id'));
+                const langImport = b.getAttribute('data-remplir-lang') === 'en' ? 'en' : 'fr';
+                b.disabled = true;
+                b.innerHTML = '<span class="roue petite" aria-hidden="true"></span> Récupération et pagination…';
+                try {
+                  const rImp = await fetch('/api/livre-libre', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({ action: 'importer', id: idImport, type: livre.type }),
+                  });
+                  const { pages = [] } = await rImp.json();
+                  b.innerHTML = `<span class="roue petite" aria-hidden="true"></span> Enregistrement (${pages.length} pages)…`;
+                  if (langImport !== livre.langue) {
+                    await etat.supabase.from('books').update({ langue: langImport }).eq('id', livre.id);
+                  }
+                  const tailleLot = 50;
+                  for (let i = 0; i < pages.length; i += tailleLot) {
+                    const lot = pages.slice(i, i + tailleLot).map((texte, idx) => ({
+                      book_id: livre.id,
+                      numero: i + idx + 1,
+                      texte,
+                    }));
+                    await etat.supabase.from('pages').insert(lot);
+                  }
+                  supprimerCache(`bibliotheque:${etat.user.id}`);
+                  supprimerCache(`livre:${livre.id}`);
+                  toast(`Livre complet importé (${pages.length} pages) !`);
+                  location.hash = `#/lecteur/${livre.id}`;
+                } catch (err) {
+                  b.disabled = false;
+                  b.innerHTML = '📥 Réessayer';
+                  toast(messageErreur(err));
                 }
-                supprimerCache(`bibliotheque:${etat.user.id}`);
-                supprimerCache(`livre:${livre.id}`);
-                toast(`Livre complet importé (${pages.length} pages) !`);
-                location.hash = `#/lecteur/${livre.id}`;
-              } catch (err) {
-                b.disabled = false;
-                b.innerHTML = '📥 Réessayer';
-                toast(messageErreur(err));
-              }
+              });
             });
           } else {
             zoneRetourRapide.innerHTML = `

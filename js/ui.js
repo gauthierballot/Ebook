@@ -118,9 +118,13 @@ export function lireMetaApple(titre, auteur) {
 export function enregistrerMetaApple(titre, auteur, meta) {
   if (!titre || !meta) return;
   try {
+    const existant = lireMetaApple(titre, auteur) || {};
     localStorage.setItem(cleMetaApple(titre, auteur), JSON.stringify({
-      couverture: meta.couverture || null,
-      resume: meta.resume || '',
+      couverture: meta.couverture || existant.couverture || null,
+      resume: meta.resume || existant.resume || '',
+      versions: meta.versions || existant.versions || null,
+      langueEdition: meta.langueEdition || existant.langueEdition || null,
+      nomLangueEdition: meta.nomLangueEdition || existant.nomLangueEdition || null,
       ts: Date.now(),
     }));
   } catch { /* quota atteint : ignoré */ }
@@ -290,16 +294,42 @@ export function ouvrirFeuilleResume({
   textePage = '',
   numPage = 1,
   token = '',
+  versions = null,
   surImporter = null,
+  surImporterVersion = null,
 } = {}) {
   const metaCache = lireMetaApple(titre, auteur);
   const couv = couverture || metaCache?.couverture || '';
   const apercuDepart = resumeInitial || metaCache?.resume || '';
+  const vers = versions || metaCache?.versions || null;
   const cacheModes = {
     apercu: apercuDepart,
     complet: '',
     page: '',
   };
+
+  const aVoSeparee = Boolean(vers?.vo?.id && vers.vo.langue && vers.vo.langue !== 'fr' && vers.vo.langue !== 'en');
+  const blocBoutonsVersions = (surImporterVersion && vers && (vers.fr || vers.en || aVoSeparee)) ? `
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bordure)">
+      <p class="aide" style="margin:0 0 8px;font-weight:600;color:var(--texte)">📥 Choisir la version gratuite à importer :</p>
+      <div class="grille-versions-libres">
+        ${vers.fr?.id ? `
+          <button type="button" class="btn-version-libre" data-ver-cle="fr">
+            <span class="drapeau-ver">🇫🇷</span>
+            <span><strong>Version française</strong><small>${esc(vers.fr.titre || titre)}</small></span>
+          </button>` : ''}
+        ${vers.en?.id ? `
+          <button type="button" class="btn-version-libre" data-ver-cle="en">
+            <span class="drapeau-ver">🇬🇧</span>
+            <span><strong>Version anglaise</strong><small>${esc(vers.en.titre || titre)}</small></span>
+          </button>` : ''}
+        ${aVoSeparee ? `
+          <button type="button" class="btn-version-libre vo" data-ver-cle="vo">
+            <span class="drapeau-ver">🌍</span>
+            <span><strong>Version VO (${esc(vers.vo.nomLangue || vers.vo.langue.toUpperCase())})</strong><small>${esc(vers.vo.titre || titre)}</small></span>
+          </button>` : ''}
+      </div>
+    </div>` : '';
 
   const f = ouvrirFeuille({
     titre: 'Résumé du livre',
@@ -326,13 +356,13 @@ export function ouvrirFeuilleResume({
 
       <div class="zone-texte-resume" id="zone-texte-resume" aria-live="polite"></div>
 
-      ${surImporter ? `
+      ${blocBoutonsVersions || (surImporter ? `
         <div class="actions" style="margin-top:18px">
           <button type="button" class="btn btn-succes btn-bloc" id="btn-importer-depuis-resume">
             📥 Importer tout le livre gratuitement
           </button>
         </div>
-      ` : ''}`,
+      ` : '')}`,
   });
 
   const zoneTexte = f.el.querySelector('#zone-texte-resume');
@@ -405,11 +435,191 @@ export function ouvrirFeuilleResume({
     radio.addEventListener('change', () => chargerMode(radio.value));
   });
 
+  f.el.querySelectorAll('[data-ver-cle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cle = btn.getAttribute('data-ver-cle');
+      const v = vers?.[cle];
+      if (!v) return;
+      f.fermer();
+      surImporterVersion(v, cle);
+    });
+  });
+
   f.el.querySelector('#btn-importer-depuis-resume')?.addEventListener('click', () => {
     f.fermer();
     surImporter();
   });
 
   chargerMode('apercu');
+  return f;
+}
+
+/**
+ * Ouvre une feuille permettant d'importer ou d'ouvrir un livre gratuit en accès libre
+ * dans sa version Française, sa version Anglaise, ou sa VO (uniquement si la VO n'est ni FR ni EN).
+ */
+export function ouvrirFeuilleVersionsLibres({ livre, token = '', etat, supprimerCache }) {
+  const titreNettoye = String(livre.titre || '').replace(/\s*\(VO[^)]*\)\s*/i, '').trim();
+  const meta = lireMetaApple(livre.titre, livre.auteur) || lireMetaApple(titreNettoye, livre.auteur);
+
+  const f = ouvrirFeuille({
+    titre: 'Versions en accès libre',
+    contenu: `
+      <p class="aide" style="margin:0 0 12px;color:var(--texte-2)">
+        Choisis la version intégrale gratuite de <strong>${esc(titreNettoye)}</strong> à ouvrir dans ta bibliothèque :
+      </p>
+      <div id="zone-versions-libres" aria-live="polite">
+        <div class="etat-chargement" style="padding:24px 12px">
+          <span class="roue petite" aria-hidden="true" style="margin-bottom:8px"></span>
+          <p style="margin:0;font-size:.9rem">Recherche des éditions (Français, Anglais & VO)…</p>
+        </div>
+      </div>`,
+  });
+
+  const zone = f.el.querySelector('#zone-versions-libres');
+
+  async function importerEdition(ver) {
+    zone.innerHTML = `
+      <div class="etat-chargement" style="padding:24px 12px">
+        <span class="roue petite" aria-hidden="true" style="margin-bottom:8px"></span>
+        <p style="margin:0;font-size:.9rem" id="statut-import-ver">Récupération et pagination de « ${esc(ver.titre || titreNettoye)} »…</p>
+      </div>`;
+    const statutEl = zone.querySelector('#statut-import-ver');
+
+    try {
+      const r = await fetch('/api/livre-libre', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'importer',
+          id: ver.id,
+          type: livre.type || 'roman',
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.erreur || "Impossible d'importer cette version.");
+      }
+      const { titre, langue: langGut, nomLangue: nomGut, pages } = await r.json();
+      if (statutEl) statutEl.textContent = `Enregistrement (${pages.length} pages)…`;
+
+      const codeLang = ver.langue || langGut || 'fr';
+      const nomLang = ver.nomLangue || nomGut || (codeLang === 'en' ? 'Anglais' : 'Français');
+      let titreFinal = (ver.titre || titre || titreNettoye).slice(0, 180);
+      if (codeLang !== 'fr' && codeLang !== 'en' && !/VO/i.test(titreFinal)) {
+        titreFinal = `${titreFinal} (VO · ${nomLang})`.slice(0, 200);
+      }
+      const langueBdd = codeLang === 'en' ? 'en' : 'fr';
+
+      enregistrerMetaApple(titreFinal, livre.auteur || '', {
+        couverture: meta?.couverture || null,
+        resume: meta?.resume || '',
+        versions: meta?.versions || null,
+        langueEdition: codeLang,
+        nomLangueEdition: nomLang,
+      });
+
+      const { data: livreCree, error: errLivre } = await etat.supabase
+        .from('books')
+        .insert({
+          titre: titreFinal,
+          auteur: livre.auteur || '',
+          type: livre.type || 'roman',
+          langue: langueBdd,
+          user_id: etat.user.id,
+        })
+        .select('id')
+        .single();
+
+      if (errLivre) throw errLivre;
+
+      const tailleLot = 50;
+      for (let i = 0; i < pages.length; i += tailleLot) {
+        const lot = pages.slice(i, i + tailleLot).map((texte, idx) => ({
+          book_id: livreCree.id,
+          numero: i + idx + 1,
+          texte,
+        }));
+        const { error: errPages } = await etat.supabase.from('pages').insert(lot);
+        if (errPages) throw errPages;
+      }
+
+      supprimerCache?.(`bibliotheque:${etat.user.id}`);
+      f.fermer();
+      toast(`Version ${nomLang.toLowerCase()} importée (${pages.length} pages) !`);
+      location.hash = `#/lecteur/${livreCree.id}`;
+    } catch (e) {
+      zone.innerHTML = `<p class="message message-erreur" style="margin:0">${esc(messageErreur(e))}</p>`;
+    }
+  }
+
+  function afficherBoutons(vers) {
+    const aVoSeparee = Boolean(vers?.vo?.id && vers.vo.langue && vers.vo.langue !== 'fr' && vers.vo.langue !== 'en');
+    if (!vers?.fr?.id && !vers?.en?.id && !aVoSeparee) {
+      zone.innerHTML = `
+        <div class="carte-libre-refuse" style="margin:0">
+          🔒 Aucune version gratuite en accès libre (domaine public) n'a été trouvée pour ce livre.
+        </div>`;
+      return;
+    }
+
+    zone.innerHTML = `
+      <div class="grille-versions-libres">
+        ${vers?.fr?.id ? `
+          <button type="button" class="btn-version-libre" data-ver="fr">
+            <span class="drapeau-ver">🇫🇷</span>
+            <span><strong>Version française</strong><small>${esc(vers.fr.titre || titreNettoye)}</small></span>
+          </button>` : ''}
+        ${vers?.en?.id ? `
+          <button type="button" class="btn-version-libre" data-ver="en">
+            <span class="drapeau-ver">🇬🇧</span>
+            <span><strong>Version anglaise</strong><small>${esc(vers.en.titre || titreNettoye)}</small></span>
+          </button>` : ''}
+        ${aVoSeparee ? `
+          <button type="button" class="btn-version-libre vo" data-ver="vo">
+            <span class="drapeau-ver">🌍</span>
+            <span><strong>Version VO (${esc(vers.vo.nomLangue || vers.vo.langue.toUpperCase())})</strong><small>${esc(vers.vo.titre || titreNettoye)}</small></span>
+          </button>` : ''}
+      </div>`;
+
+    zone.querySelectorAll('[data-ver]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cle = btn.getAttribute('data-ver');
+        if (vers?.[cle]) importerEdition(vers[cle]);
+      });
+    });
+  }
+
+  if (meta?.versions && (meta.versions.fr || meta.versions.en || meta.versions.vo)) {
+    afficherBoutons(meta.versions);
+  } else {
+    fetch('/api/livre-libre', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        action: 'chercher',
+        titre: titreNettoye,
+        auteur: livre.auteur || '',
+        langue: livre.langue || 'fr',
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(({ versions, metaApple }) => {
+        if (versions) {
+          enregistrerMetaApple(livre.titre, livre.auteur || '', { ...(metaApple || {}), versions });
+        }
+        afficherBoutons(versions);
+      })
+      .catch(() => {
+        zone.innerHTML = `<p class="message message-erreur" style="margin:0">Impossible de vérifier les versions disponibles pour le moment.</p>`;
+      });
+  }
+
   return f;
 }

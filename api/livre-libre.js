@@ -177,36 +177,195 @@ async function chercherMetaApple({ titre = '', auteur = '', langue = 'fr' }) {
   }
 }
 
+// Noms lisibles en français pour les codes de langue ISO de Gutenberg
+const NOMS_LANGUES = {
+  fr: 'Français',
+  en: 'Anglais',
+  de: 'Allemand',
+  es: 'Espagnol',
+  it: 'Italien',
+  pt: 'Portugais',
+  ru: 'Russe',
+  nl: 'Néerlandais',
+  la: 'Latin',
+  el: 'Grec',
+  pl: 'Polonais',
+  sv: 'Suédois',
+  da: 'Danois',
+  zh: 'Chinois',
+  ja: 'Japonais',
+};
+
+// Repères rapides d'auteurs classiques dont la VO n'est ni française ni anglaise
+const AUTEURS_VO_CONNUS = [
+  { regex: /cervantes/i, code: 'es', nom: 'Espagnol' },
+  { regex: /dante|alighieri|boccaccio|machiavel|pirandello|collodi/i, code: 'it', nom: 'Italien' },
+  { regex: /goethe|kafka|schiller|heine|nietzsche|grimm|mann|rilke|zweig/i, code: 'de', nom: 'Allemand' },
+  { regex: /dosto[iï]evski|dostoevsky|tolsto[iï]|tolstoy|tchekhov|chekhov|gogol|pouchkine|pushkin|tourgueniev/i, code: 'ru', nom: 'Russe' },
+  { regex: /hom[eè]re|homer|sophocle|euripide|eschyle|platon|aristote/i, code: 'el', nom: 'Grec' },
+  { regex: /virgile|ovide|cic[eé]ron|s[eé]n[eè]que|marc[- ]aur[eè]le/i, code: 'la', nom: 'Latin' },
+  { regex: /cam[oõ]es|pessoa|machado de assis/i, code: 'pt', nom: 'Portugais' },
+  { regex: /ibsen/i, code: 'da', nom: 'Danois / Norvégien' },
+  { regex: /spinoza|erasme/i, code: 'la', nom: 'Latin' },
+];
+
+/**
+ * Identifie les titres FR / EN / VO et la langue originale d'une œuvre.
+ * Si la langue originale est 'fr' ou 'en', voCode est null (pas de bouton VO séparé).
+ */
+async function resoudreVersionsOeuvre({ titre = '', auteur = '' }) {
+  const t = String(titre).trim();
+  const a = String(auteur).trim();
+  const auteurConn = AUTEURS_VO_CONNUS.find((x) => x.regex.test(`${a} ${t}`));
+
+  const apiKey = process.env.LLM_API_KEY;
+  if (apiKey && apiKey.trim()) {
+    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3500);
+    try {
+      const prompt = `Identify the literary work "${t}"${a ? ` by "${a}"` : ''}.
+Return ONLY a raw JSON object (no markdown, no backticks):
+{
+  "auteur": "Author canonical name",
+  "langueOriginale": "2-letter ISO code of the original language the book was written in (e.g. fr, en, de, es, it, ru, pt, la, el)",
+  "titreFr": "French title of the book",
+  "titreEn": "English title of the book",
+  "titreVo": "Original title in its original language (empty if original language is fr or en)"
+}`;
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 220 },
+        }),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        const brut = data.candidates?.[0]?.content?.parts?.find((p) => typeof p.text === 'string' && !p.thought)?.text?.trim() || '';
+        const propre = brut.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+        const j = JSON.parse(propre);
+        const codeOrig = String(j.langueOriginale || auteurConn?.code || '').toLowerCase().trim();
+        return {
+          auteur: String(j.auteur || a).trim(),
+          langueOriginale: codeOrig || 'fr',
+          nomLangueOriginale: NOMS_LANGUES[codeOrig] || auteurConn?.nom || codeOrig.toUpperCase(),
+          titreFr: String(j.titreFr || t).trim(),
+          titreEn: String(j.titreEn || t).trim(),
+          titreVo: (codeOrig && codeOrig !== 'fr' && codeOrig !== 'en') ? String(j.titreVo || t).trim() : '',
+        };
+      }
+    } catch { /* repli rapide ci-dessous */ } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const codeOrig = auteurConn?.code || '';
+  return {
+    auteur: a,
+    langueOriginale: codeOrig,
+    nomLangueOriginale: auteurConn?.nom || (codeOrig ? (NOMS_LANGUES[codeOrig] || codeOrig.toUpperCase()) : ''),
+    titreFr: t,
+    titreEn: t,
+    titreVo: (codeOrig && codeOrig !== 'fr' && codeOrig !== 'en') ? t : '',
+  };
+}
+
 // -----------------------------------------------------------------------------
-// Recherche combinée : Texte intégral Gutenberg + Couverture officielle Apple
+// Recherche combinée : Texte intégral Gutenberg (FR, EN et VO) + Couverture Apple
 // -----------------------------------------------------------------------------
 async function chercher({ titre = '', auteur = '', langue = 'fr' }) {
   const t = String(titre).trim().slice(0, 150);
   const a = String(auteur).trim().slice(0, 100);
   if (!t) throw erreur(400, 'Titre manquant.');
 
-  // On lance en parallèle la recherche Gutenberg et la recherche de couverture Apple Livres
-  const [idsInitiaux, metaApple] = await Promise.all([
+  // 1. Résolution des titres FR / EN / VO + Métadonnées Apple + Recherche Gutenberg initiale en parallèle
+  const [infosOeuvre, idsInitiaux, metaApple] = await Promise.all([
+    resoudreVersionsOeuvre({ titre: t, auteur: a }),
     idsGutenberg(`${t} ${a}`.trim()).catch(() => []),
     chercherMetaApple({ titre: t, auteur: a, langue }),
   ]);
 
-  let ids = idsInitiaux;
-  if (!ids.length && a) ids = await idsGutenberg(t).catch(() => []);
+  const aFinal = a || infosOeuvre.auteur || '';
+  const codeVo = (infosOeuvre.langueOriginale && infosOeuvre.langueOriginale !== 'fr' && infosOeuvre.langueOriginale !== 'en')
+    ? infosOeuvre.langueOriginale
+    : '';
 
-  // Fiches lues en parallèle (5 maximum pour rester rapide)
-  const fiches = (await Promise.allSettled(ids.slice(0, 5).map(lireFiche)))
+  // 2. Requêtes complémentaires pour trouver les éditions FR, EN et éventuellement VO
+  const requetesSupp = [];
+  if (infosOeuvre.titreFr && infosOeuvre.titreFr.toLowerCase() !== t.toLowerCase()) {
+    requetesSupp.push(idsGutenberg(`${infosOeuvre.titreFr} ${aFinal}`.trim()).catch(() => []));
+  }
+  if (infosOeuvre.titreEn && infosOeuvre.titreEn.toLowerCase() !== t.toLowerCase()) {
+    requetesSupp.push(idsGutenberg(`${infosOeuvre.titreEn} ${aFinal}`.trim()).catch(() => []));
+  }
+  if (codeVo && infosOeuvre.titreVo && infosOeuvre.titreVo.toLowerCase() !== t.toLowerCase()) {
+    requetesSupp.push(idsGutenberg(`${infosOeuvre.titreVo} ${aFinal}`.trim()).catch(() => []));
+  }
+  if (!idsInitiaux.length && aFinal) {
+    requetesSupp.push(idsGutenberg(t).catch(() => []));
+    requetesSupp.push(idsGutenberg(aFinal).catch(() => []));
+  }
+
+  const listesSupp = await Promise.all(requetesSupp);
+  const tousIds = [...new Set([
+    ...idsInitiaux.slice(0, 6),
+    ...listesSupp.flatMap((l) => l.slice(0, 4)),
+  ])].slice(0, 12);
+
+  // 3. Lecture des fiches RDF en parallèle
+  const toutesFiches = (await Promise.allSettled(tousIds.map(lireFiche)))
     .filter((r) => r.status === 'fulfilled')
-    .map((r) => r.value)
-    .filter((f) => !langue || f.langue === langue);
+    .map((r) => r.value);
+
+  // Sélection de la meilleure fiche libre par version : FR, EN, et VO (si VO != fr et VO != en)
+  const ficheFr = toutesFiches.find((f) => f.libre && f.langue === 'fr') || null;
+  const ficheEn = toutesFiches.find((f) => f.libre && f.langue === 'en') || null;
+
+  // Pour la VO : uniquement si la langue originale n'est ni 'fr' ni 'en'
+  let ficheVo = null;
+  let codeVoFinal = codeVo;
+  if (codeVoFinal) {
+    ficheVo = toutesFiches.find((f) => f.libre && f.langue === codeVoFinal) || null;
+  } else {
+    // Si la requête initiale tombe directement sur une œuvre libre dont la langue n'est ni 'fr' ni 'en'
+    const autreLibre = toutesFiches.find((f) => f.libre && f.langue && f.langue !== 'fr' && f.langue !== 'en');
+    if (autreLibre && (!infosOeuvre.langueOriginale || (infosOeuvre.langueOriginale !== 'fr' && infosOeuvre.langueOriginale !== 'en'))) {
+      ficheVo = autreLibre;
+      codeVoFinal = autreLibre.langue;
+    }
+  }
+
+  const nomVo = codeVoFinal ? (NOMS_LANGUES[codeVoFinal] || infosOeuvre.nomLangueOriginale || codeVoFinal.toUpperCase()) : '';
+
+  const versions = {
+    fr: ficheFr ? { id: ficheFr.id, titre: ficheFr.titre, langue: 'fr', nomLangue: 'Français' } : null,
+    en: ficheEn ? { id: ficheEn.id, titre: ficheEn.titre, langue: 'en', nomLangue: 'Anglais' } : null,
+    vo: (codeVoFinal && codeVoFinal !== 'fr' && codeVoFinal !== 'en' && ficheVo)
+      ? { id: ficheVo.id, titre: ficheVo.titre, langue: codeVoFinal, nomLangue: nomVo }
+      : null,
+    langueOriginale: codeVoFinal || infosOeuvre.langueOriginale || langue || 'fr',
+    nomLangueOriginale: nomVo || NOMS_LANGUES[infosOeuvre.langueOriginale] || '',
+  };
+
+  // Liste principale des résultats (en privilégiant la langue demandée, puis toutes les versions libres trouvées)
+  const fichesTriees = [
+    ...toutesFiches.filter((f) => f.langue === langue),
+    ...toutesFiches.filter((f) => f.langue !== langue),
+  ];
 
   return {
     metaApple,
-    resultats: fiches.map((f) => ({
+    versions,
+    resultats: fichesTriees.map((f) => ({
       id: f.id,
       titre: f.titre,
       auteur: f.auteurs.map((x) => x.nom).join(', '),
       annees: f.auteurs.map((x) => (x.naissance || x.deces ? `${x.naissance ?? '?'}–${x.deces ?? '?'}` : '')).filter(Boolean).join(', '),
+      langue: f.langue,
+      nomLangue: NOMS_LANGUES[f.langue] || f.langue.toUpperCase(),
       libre: f.libre,
       raison: f.raison,
       couverture: metaApple?.couverture || `${GUTENBERG}/cache/epub/${f.id}/pg${f.id}.cover.medium.jpg`,
@@ -239,7 +398,7 @@ async function importer({ id, type = 'roman' }) {
   const pages = paginer(texte, type === 'theatre');
   if (pages.length < 2) throw erreur(422, 'Le texte de ce livre n\'a pas pu être récupéré proprement.');
 
-  return { titre: fiche.titre, pages };
+  return { titre: fiche.titre, langue: fiche.langue || 'fr', nomLangue: NOMS_LANGUES[fiche.langue] || '', pages };
 }
 
 /** Retire l'en-tête et la licence Gutenberg, les marques d'italique, etc. */
@@ -380,17 +539,19 @@ If the image is not a book cover/title page or the title is impossible to determ
   // Recherche automatique des versions libres et de la couverture officielle Apple
   let resultats = [];
   let metaApple = null;
+  let versions = null;
   if (titre) {
     try {
       const res = await chercher({ titre, auteur, langue });
       resultats = res.resultats || [];
       metaApple = res.metaApple || null;
+      versions = res.versions || null;
     } catch {
       resultats = [];
     }
   }
 
-  return { titre, auteur, langue, type, resultats, metaApple };
+  return { titre, auteur, langue, type, resultats, metaApple, versions };
 }
 
 // -----------------------------------------------------------------------------

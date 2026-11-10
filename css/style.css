@@ -415,6 +415,85 @@ body.mode-lecture .contenu { max-width: none; padding: 0; }
 .carte-classique-apple .badge-gratuit:hover {
   background: color-mix(in srgb, var(--succes) 22%, transparent);
 }
+.rangee-versions-mini {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+}
+.btn-ver-mini {
+  padding: 5px 4px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--succes) 30%, transparent);
+  background: color-mix(in srgb, var(--succes) 12%, transparent);
+  font-size: .71rem;
+  font-weight: 700;
+  color: var(--succes);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--transition), transform var(--transition);
+}
+.btn-ver-mini:hover {
+  background: color-mix(in srgb, var(--succes) 24%, transparent);
+}
+.btn-ver-mini.vo {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-doux);
+  color: var(--accent);
+}
+.btn-ver-mini.vo:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.grille-versions-libres {
+  display: grid;
+  gap: 8px;
+}
+.btn-version-libre {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1.5px solid color-mix(in srgb, var(--succes) 35%, transparent);
+  background: color-mix(in srgb, var(--succes) 10%, var(--surface));
+  color: var(--texte);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition), transform var(--transition);
+}
+.btn-version-libre:hover {
+  border-color: var(--succes);
+  background: color-mix(in srgb, var(--succes) 18%, var(--surface));
+}
+.btn-version-libre.vo {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-doux);
+}
+.btn-version-libre.vo:hover {
+  border-color: var(--accent);
+}
+.btn-version-libre .drapeau-ver {
+  font-size: 1.35rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.btn-version-libre span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.btn-version-libre strong {
+  font-size: .92rem;
+  color: var(--texte);
+}
+.btn-version-libre small {
+  font-size: .78rem;
+  color: var(--texte-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .encadre-resume {
   background: var(--fond-2);
   border: 1px solid var(--bordure);
